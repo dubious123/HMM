@@ -14,8 +14,11 @@ struct c_session
 	uint32				   recv_flag;
 	WSAOVERLAPPED		   wsa_overlapped;
 	sockaddr_in6		   client_addr;
+	int32				   client_addr_size;
 
-	c_session() : recv_len(0), recv_flag(0)
+	SOCKET recv_socket;
+
+	c_session() : recv_len(0), recv_flag(0), client_addr_size(sizeof(client_addr))
 	{
 		ZeroMemory(&wsa_buf, sizeof(wsa_buf));
 		ZeroMemory(&wsa_overlapped, sizeof(wsa_overlapped));
@@ -73,29 +76,43 @@ namespace
 		}
 	}
 
-	void _recv_loop()
-	{
-		while (recving)
-		{
-			auto recv_len = ::recvfrom(listen_socket, recv_buffer, sizeof(recv_buffer), 0, nullptr, nullptr);
-			assert(recv_len == sizeof(packet));
-
-			auto* p_recv	 = (packet*)recv_buffer;
-			p_recv->t_s_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-
-			auto duration = std::chrono::nanoseconds(p_recv->t_s_recv - p_recv->t_c_send);
-			logger::info("[server] : seq num : {}, client->server duration : {}ns", p_recv->seq_num, duration.count());
-
-			send_queue.push(*p_recv);
-		}
-	}
-
 	void _iocp_recv_loop()
 	{
-	}
+		auto p_session = (c_session*)nullptr;
+		auto recv_len  = 0ul;
+		auto p_wol	   = (LPWSAOVERLAPPED) nullptr;
+		while (true)
+		{
+			auto res = ::GetQueuedCompletionStatus(h_iocp, &recv_len, (PULONG_PTR)&p_session, &p_wol, INFINITE);
+			if (res is_false)
+			{
+				if (p_wol is_nullptr)
+				{
+					continue;	 //?
+				}
 
-	void _iocap_listen_loop()
-	{
+				err_msg("GetQueuedCompletionStatus failed");
+				free(p_wol);
+				continue;
+			}
+
+			auto* p_recv	 = (packet*)p_session->recv_buf.data();
+			p_recv->t_s_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			auto duration	 = std::chrono::nanoseconds(p_recv->t_s_recv - p_recv->t_c_send);
+			logger::info("[server] : seq num : {}, client->server duration : {}ns", p_recv->seq_num, duration.count());
+			send_queue.push(*p_recv);
+
+			res = ::WSARecvFrom(listen_socket, &p_session->wsa_buf, 1, (LPDWORD)&p_session->recv_len, (LPDWORD)&p_session->recv_flag, (sockaddr*)&p_session->client_addr, &p_session->client_addr_size, &p_session->wsa_overlapped, nullptr);
+			if (res == SOCKET_ERROR)
+			{
+				auto err = ::WSAGetLastError();
+				if (err != WSA_IO_PENDING)
+				{
+					err_msg("WSARecv failed");
+					continue;
+				}
+			}
+		}
 	}
 }	 // namespace
 
@@ -117,19 +134,19 @@ bool server::init()
 		goto failed;
 	}
 
-	h_iocp = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
-	if (h_iocp is_nullptr)
-	{
-		err_msg("iocp creation failed");
-		goto failed;
-	}
-
 	send_socket	  = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	listen_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 
 	if (send_socket == INVALID_SOCKET or listen_socket == INVALID_SOCKET)
 	{
 		err_msg("socket creation failed");
+		goto failed;
+	}
+
+	h_iocp = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
+	if (h_iocp is_nullptr)
+	{
+		err_msg("iocp creation failed");
 		goto failed;
 	}
 
@@ -164,8 +181,16 @@ bool server::init()
 	for (auto idx : std::views::iota(0, LISTEN_THREAD_COUNT))
 	{
 		// listen_thread_arr[idx] = std::thread(_iocp_listen_loop);
-		auto& session = sessions[idx];
-		auto  res	  = ::WSARecvFrom(listen_socket, &session.wsa_buf, 1, (LPDWORD)&session.recv_len, (LPDWORD)&session.recv_flag, &session.wsa_overlapped, nullptr);
+		auto& session		= sessions[idx];
+		session.recv_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+		if (session.recv_socket == INVALID_SOCKET)
+		{
+			err_msg("socket creation failed");
+			goto failed;
+		}
+
+		::CreateIoCompletionPort((HANDLE)listen_socket, h_iocp, (ULONG_PTR)&session, 0);
+		auto res = ::WSARecvFrom(listen_socket, &session.wsa_buf, 1, (LPDWORD)&session.recv_len, (LPDWORD)&session.recv_flag, (sockaddr*)&session.client_addr, &session.client_addr_size, &session.wsa_overlapped, nullptr);
 		if (res == SOCKET_ERROR)
 		{
 			auto err = ::WSAGetLastError();
@@ -187,7 +212,7 @@ failed:
 void server::run()
 {
 	send_thread = std::thread(_send_loop);
-	recv_thread = std::thread(_recv_loop);
+	// recv_thread = std::thread(_recv_loop);
 
 	send_thread.join();
 	recv_thread.join();

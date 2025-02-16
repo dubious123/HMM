@@ -9,6 +9,10 @@
 	#pragma comment(lib, "network_core.lib")
 #endif
 
+struct user_data
+{
+};
+
 int main()
 {
 	if (client::init() is_false)

@@ -1,6 +1,0 @@
-[2025-02-16 16:45:23.287] [Logger] [info] [server] : seq num : 0, client->server duration : 183700ns
-[2025-02-16 16:45:24.296] [Logger] [info] [server] : seq num : 1, client->server duration : 85700ns
-[2025-02-16 16:45:25.309] [Logger] [info] [server] : seq num : 2, client->server duration : 66800ns
-[2025-02-16 16:45:26.320] [Logger] [info] [server] : seq num : 3, client->server duration : 73800ns
-[2025-02-16 16:45:27.217] [Logger] [info] [server] : seq num : 3, client->server duration : 897462800ns
-[2025-02-16 16:45:27.218] [Logger] [info] [server] : seq num : 3, client->server duration : 897519700ns
