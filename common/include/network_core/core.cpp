@@ -1,4 +1,6 @@
 #include <print>
+#include <string>
+#include <format>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -46,3 +48,16 @@ namespace logger
 	}
 
 }	 // namespace logger
+
+std::string utils::ip6addr_to_string(IN6_ADDR addr)
+{
+	return std::format("{:X},{:X},{:X},{:X},{:X},{:X},{:X},{:X}",
+					   addr.u.Word[0],
+					   addr.u.Word[1],
+					   addr.u.Word[2],
+					   addr.u.Word[3],
+					   addr.u.Word[4],
+					   addr.u.Word[5],
+					   addr.u.Word[6],
+					   addr.u.Word[7]);
+}

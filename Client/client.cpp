@@ -32,10 +32,15 @@ namespace
 
 			Sleep(1000);	// 이것때문에 차이가 나는것 같음
 
-			p.t_c_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			logger::info("sending seq {}", p.seq_num);
+			p.time_client_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 			if (sendto(send_socket, (char*)&p, sizeof(packet), 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
 			{
 				err_msg("sendto() failed");
+			}
+			else
+			{
+				// logger::info("send_to successed");
 			}
 		}
 	}
@@ -47,10 +52,10 @@ namespace
 			auto recv_len = ::recvfrom(listen_socket, recv_buffer, sizeof(recv_buffer), 0, nullptr, nullptr);
 			assert(recv_len == sizeof(packet));
 
-			auto* p_recv	 = (packet*)recv_buffer;
-			p_recv->t_c_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			auto* p_recv			 = (packet*)recv_buffer;
+			p_recv->time_client_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
-			auto duration = std::chrono::nanoseconds(p_recv->t_c_recv - p_recv->t_s_send);
+			auto duration = std::chrono::nanoseconds(p_recv->time_client_recv - p_recv->time_server_send);
 			logger::info("[client] : seq num : {}, server->client duration : {}ns", p_recv->seq_num, duration.count());
 		}
 	}
@@ -100,11 +105,11 @@ bool client::init()
 		goto failed;
 	}
 
-	if (::connect(send_socket, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
-	{
-		err_msg("connect() failed");
-		goto failed;
-	}
+	// if (::connect(send_socket, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+	//{
+	//	err_msg("connect() failed");
+	//	goto failed;
+	// }
 
 	return true;
 failed:

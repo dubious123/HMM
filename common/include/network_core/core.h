@@ -36,12 +36,12 @@ LPSTR print_err(int err_code);
 
 struct packet
 {
+	packet_type type = packet_type(0);
 	uint32		seq_num;
-	packet_type type	 = packet_type(0);
-	uint64		t_c_send = 0;
-	uint64		t_s_recv = 0;
-	uint64		t_s_send = 0;
-	uint64		t_c_recv = 0;
+	uint64		time_client_send = 0;
+	uint64		time_server_recv = 0;
+	uint64		time_server_send = 0;
+	uint64		time_client_recv = 0;
 };
 
 namespace logger
@@ -128,3 +128,8 @@ namespace logger
 		detail::_logger->critical(msg);
 	}
 }	 // namespace logger
+
+namespace utils
+{
+	std::string ip6addr_to_string(IN6_ADDR addr);
+}
