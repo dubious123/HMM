@@ -81,7 +81,12 @@ bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
 
 	for (auto* adapter = (IP_ADAPTER_ADDRESSES*)(addr_buf.data()); adapter != nullptr; adapter = adapter->Next)
 	{
-		if (adapter->IfType != 6 and adapter->IfType != 71)
+		// if (adapter->IfType != 6 and adapter->IfType != 71)
+		//{
+		//	continue;
+		// }
+
+		if (adapter->IfType != 6 and _wcsnicmp(adapter->FriendlyName, L"Wi-Fi", 100) != 0)
 		{
 			continue;
 		}
