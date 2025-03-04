@@ -41,7 +41,7 @@ struct recv_io_data
 
 	recv_io_data() : io_flag(0), client_addr_size(sizeof(client_addr))
 	{
-		assert(this == &wsa_overlapped);
+		assert((uint64)this == (uint64)&wsa_overlapped);
 		ZeroMemory(&wsa_overlapped, sizeof(WSAOVERLAPPED));
 
 		wsa_buf.len = recv_buf.size();
@@ -61,7 +61,7 @@ struct send_io_data
 
 	send_io_data() : io_flag(0), client_addr_size(sizeof(client_addr))
 	{
-		assert(this == &wsa_overlapped);
+		assert((uint64)this == (uint64)&wsa_overlapped);
 		ZeroMemory(&wsa_overlapped, sizeof(WSAOVERLAPPED));
 
 		wsa_buf.len = recv_buf.size();
@@ -132,7 +132,7 @@ struct memory_buffer
 
 	void* read()
 	{
-		assert(begin + amount <= end);
+		assert(begin + sizeof(buf_size_t) <= end);
 		auto  p_size  = (buf_size_t*)(&buf[begin]);
 		auto* p_res	  = &buf[begin + sizeof(buf_size_t)];
 		begin		 += (sizeof(buf_size_t) + *p_size);
