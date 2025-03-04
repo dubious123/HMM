@@ -311,15 +311,7 @@ bool server::init()
 		goto failed;
 	}
 
-	server_addr_info.sin6_family = AF_INET6;
-	server_addr_info.sin6_port	 = ::htons(PORT_SERVER);
-	if (inet_pton(AF_INET6, "fe80::dffa:bfeb:7029:918d", &server_addr_info.sin6_addr) != 1)
-	{
-		err_msg("inet_pton() failed");
-		goto failed;
-	}
-
-	if (::bind(listen_socket, (sockaddr*)&server_addr_info, sizeof(server_addr_info)) == SOCKET_ERROR)
+	if (net_core::bind(listen_socket, &server_addr_info, PORT_SERVER) is_false)
 	{
 		err_msg("bind() failed");
 		goto failed;

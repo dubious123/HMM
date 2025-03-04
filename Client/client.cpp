@@ -90,16 +90,13 @@ bool client::init()
 
 	server_addr_info.sin6_family = AF_INET6;
 	server_addr_info.sin6_port	 = ::htons(PORT_SERVER);
-	if (inet_pton(AF_INET6, "fe80::dffa:bfeb:7029:918d", &server_addr_info.sin6_addr) != 1)
+	if (inet_pton(AF_INET6, "fe80::28f6:b11:acc4:aaae", &server_addr_info.sin6_addr) != 1)
 	{
 		err_msg("inet_pton() failed");
 		goto failed;
 	}
 
-	client_addr_info		   = server_addr_info;
-	client_addr_info.sin6_port = ::htons(PORT_CLIENT);
-
-	if (::bind(listen_socket, (sockaddr*)&client_addr_info, sizeof(client_addr_info)) == SOCKET_ERROR)
+	if (net_core::bind(listen_socket, &client_addr_info, PORT_CLIENT) is_false)
 	{
 		err_msg("bind() failed");
 		goto failed;

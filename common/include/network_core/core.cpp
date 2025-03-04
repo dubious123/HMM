@@ -4,6 +4,7 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <iphlpapi.h>
 
 #include "core.h"
 
@@ -11,6 +12,7 @@
 #include <spdlog/sinks/stdout_sinks.h>
 
 #pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "spdlog.lib")
 
 LPSTR print_err(int err_code)
@@ -60,4 +62,64 @@ std::string utils::ip6addr_to_string(IN6_ADDR addr)
 					   addr.u.Word[5],
 					   addr.u.Word[6],
 					   addr.u.Word[7]);
+}
+
+bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
+{
+	auto flags	  = GAA_FLAG_INCLUDE_PREFIX;
+	auto family	  = AF_INET6;
+	auto addr_buf = std::array<char, (sizeof(IP_ADAPTER_ADDRESSES) * 30)>();
+
+	// Get the adapter addresses.
+	auto buf_len = addr_buf.size();
+	auto ret	 = ::GetAdaptersAddresses(family, flags, NULL, (PIP_ADAPTER_ADDRESSES)addr_buf.data(), (PULONG)&buf_len);
+	if (ret != NO_ERROR)
+	{
+		err_msg("GetAdaptersAddresses() failed");
+		return false;
+	}
+
+	for (auto* adapter = (IP_ADAPTER_ADDRESSES*)(addr_buf.data()); adapter != nullptr; adapter = adapter->Next)
+	{
+		if (adapter->IfType != 6 and adapter->IfType != 71)
+		{
+			continue;
+		}
+
+		// logger::info(L"Adapter: {}", adapter->FriendlyName);
+		// logger::info(L"Interface Type: {}", adapter->IfType);
+
+		// todo
+		for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr; unicast = unicast->Next)
+		{
+			if (unicast->Address.lpSockaddr->sa_family != AF_INET6)
+			{
+				continue;
+			}
+
+			*p_out_addr			  = *(sockaddr_in6*)(unicast->Address.lpSockaddr);
+			p_out_addr->sin6_port = ::htons(PORT_SERVER);
+
+			if (::bind(sock, (sockaddr*)p_out_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			{
+				// err_msg("bind() failed");
+				continue;
+			}
+
+			auto	wstr_len					  = (DWORD)INET6_ADDRSTRLEN;
+			wchar_t p_wstr_ipv6[INET6_ADDRSTRLEN] = { 0 };
+
+			// Convert the IPv6 address to a string.
+			if (::WSAAddressToStringW((LPSOCKADDR)p_out_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
+			{
+				logger::info(L"binding success, IPv6 Address: {}, interface : {}", p_wstr_ipv6, adapter->FriendlyName);
+			}
+
+
+			return true;
+		}
+		// logger::info("=====================================================");
+	}
+
+	return false;
 }

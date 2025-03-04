@@ -1,4 +1,5 @@
 #pragma once
+#define SPDLOG_WCHAR_TO_UTF8_SUPPORT
 #include <spdlog/spdlog.h>
 
 #define is_false   == false
@@ -44,6 +45,11 @@ struct packet
 	uint64		time_client_recv = 0;
 };
 
+namespace net_core
+{
+	bool bind(SOCKET sock, sockaddr_in6*, uint16 port);
+}
+
 namespace logger
 {
 	namespace detail
@@ -82,6 +88,12 @@ namespace logger
 
 	template <typename... Args>
 	inline void info(spdlog::format_string_t<Args...> fmt, Args&&... args)
+	{
+		detail::_logger->info(fmt, std::forward<Args>(args)...);
+	}
+
+	template <typename... Args>
+	inline void info(spdlog::wformat_string_t<Args...> fmt, Args&&... args)
 	{
 		detail::_logger->info(fmt, std::forward<Args>(args)...);
 	}
