@@ -103,7 +103,7 @@ bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
 			}
 
 			*p_out_addr			  = *(sockaddr_in6*)(unicast->Address.lpSockaddr);
-			p_out_addr->sin6_port = ::htons(PORT_SERVER);
+			p_out_addr->sin6_port = ::htons(port);
 
 			if (::bind(sock, (sockaddr*)p_out_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
 			{

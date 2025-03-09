@@ -90,7 +90,7 @@ bool client::init()
 
 	server_addr_info.sin6_family = AF_INET6;
 	server_addr_info.sin6_port	 = ::htons(PORT_SERVER);
-	if (inet_pton(AF_INET6, "2001:2d8:f219:c1d2:917e:6c27:8798:dcdb", &server_addr_info.sin6_addr) != 1)
+	if (inet_pton(AF_INET6, "fe80::dffa:bfeb:7029:918d", &server_addr_info.sin6_addr) != 1)
 	{
 		err_msg("inet_pton() failed");
 		goto failed;
