@@ -1,13 +1,16 @@
-#include <iostream>
-#include <cstring>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <chrono>
+#include <sys/time.h>
+#include <inttypes.h>
 
-#define SERVER_IP "fe80::dffa:bfeb:7029:918d%en0"  // 서버의 IPv6 주소 (네트워크 인터페이스 확인 필수)
-#define SERVER_PORT 12345                          // 서버의 포트 번호
+#define SERVER_IP "fe80::7087:d734:b188:8dde%en0"  // 서버의 IPv6 주소
+#define SERVER_PORT 5050                           // 서버의 포트 번호
 
+// 패킷 구조체 정의
 struct packet {
     uint64_t seq_num;
     uint64_t time_client_send;
@@ -15,10 +18,18 @@ struct packet {
     uint64_t time_client_recv;
 };
 
+// 현재 시간을 ns 단위로 반환하는 함수
+uint64_t get_current_time_ns() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)tv.tv_sec * 1000000000LL + (uint64_t)tv.tv_usec * 1000LL;
+}
+
 int main() {
     int sock;
     struct sockaddr_in6 server_addr, client_addr;
     struct packet p;
+    socklen_t addr_len = sizeof(server_addr);
 
     // UDP 소켓 생성
     sock = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -33,48 +44,46 @@ int main() {
     server_addr.sin6_port = htons(SERVER_PORT);
     inet_pton(AF_INET6, SERVER_IP, &server_addr.sin6_addr);
 
-    // 클라이언트 소켓 바인딩 (응답을 받기 위해 필요)
+    // 클라이언트 소켓 바인딩 (서버 응답 수신을 위해 필요)
     memset(&client_addr, 0, sizeof(client_addr));
     client_addr.sin6_family = AF_INET6;
     client_addr.sin6_port = htons(0);  // OS가 랜덤한 포트 할당
     client_addr.sin6_addr = in6addr_any;
-    bind(sock, (struct sockaddr*)&client_addr, sizeof(client_addr));
+    if (bind(sock, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0) {
+        perror("bind failed");
+        close(sock);
+        return 1;
+    }
 
     // 패킷 전송 루프
     p.seq_num = 0;
 
-    while (true) {
+    while (1) {
         // 현재 시간 기록 (패킷 전송 시간)
-        p.time_client_send = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
+        p.time_client_send = get_current_time_ns();
 
         // 서버로 패킷 전송
-        if (sendto(sock, &p, sizeof(p), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        if (sendto(sock, &p, sizeof(p), 0, (struct sockaddr*)&server_addr, addr_len) < 0) {
             perror("sendto() failed");
             close(sock);
             return 1;
         }
 
-        std::cout << "[Client] Sent packet: " << p.seq_num << std::endl;
+        printf("[Client] Sent packet: %" PRIu64 "\n", p.seq_num);
 
         // 서버 응답 대기
-        socklen_t addr_len = sizeof(server_addr);
-        if (recvfrom(sock, &p, sizeof(p), 0, (struct sockaddr*)&server_addr, &addr_len) < 0) {
-            perror("recvfrom() failed");
-            close(sock);
-            return 1;
-        }
+        // if (recvfrom(sock, &p, sizeof(p), 0, (struct sockaddr*)&server_addr, &addr_len) < 0) {
+        //     perror("recvfrom() failed");
+        //     close(sock);
+        //     return 1;
+        // }
 
         // 현재 시간 기록 (서버 응답 수신 시간)
-        p.time_client_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
+        p.time_client_recv = get_current_time_ns();
 
         // RTT (왕복 시간) 계산 및 출력
-        auto rtt = p.time_client_recv - p.time_client_send;
-        std::cout << "[Client] Received seq_num: " << p.seq_num
-                  << ", RTT: " << rtt << " ns" << std::endl;
+        uint64_t rtt = p.time_client_recv - p.time_client_send;
+        printf("[Client] Received seq_num: %" PRIu64 ", RTT: %" PRIu64 " ns\n", p.seq_num, rtt);
 
         p.seq_num++;  // 패킷 번호 증가
         sleep(1);  // 1초 대기 후 다시 전송
