@@ -1,0 +1,106 @@
+import SwiftUI
+
+// 배터리 상태를 사람이 읽기 쉬운 문자열로 변환하는 함수
+func batteryStateDescription(_ state: UIDevice.BatteryState) -> String {
+    switch state {
+    case .unknown:
+        return "Unknown"
+    case .unplugged:
+        return "Unplugged"
+    case .charging:
+        return "Charging"
+    case .full:
+        return "Full"
+    @unknown default:
+        return "Unknown"
+    }
+}
+
+struct ContentView: View {
+    @State private var userDataText: String = "데이터를 불러오는 중..."
+    
+    // UserDataCollector는 사용자 데이터를 수집합니다.
+    let dataCollector = UserDataCollector()
+    
+    // UDPSenderWrapper는 1초 간격으로 UDP 패킷을 전송하고, 로그를 관리합니다.
+    @StateObject private var udpSender = UDPSenderWrapper()
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                // 사용자 데이터 표시 영역
+                ScrollView {
+                    Text(userDataText)
+                        .padding()
+                        .multilineTextAlignment(.leading)
+                }
+                .frame(height: 200)
+                .border(Color.gray, width: 1)
+                
+                // UDP 로그 표시 영역 (자동 스크롤)
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(alignment: .leading) {
+                            Text(udpSender.logText)
+                                .padding()
+                                .multilineTextAlignment(.leading)
+                                .id("LOG_BOTTOM") // 스크롤 대상
+                        }
+                    }
+                    .frame(height: 200)
+                    .border(Color.gray, width: 1)
+                    .onChange(of: udpSender.logText) { _ in
+                        // 로그가 추가될 때마다 맨 아래로 스크롤
+                        withAnimation {
+                            scrollProxy.scrollTo("LOG_BOTTOM", anchor: .bottom)
+                        }
+                    }
+                }
+                
+                HStack(spacing: 20) {
+                    // 사용자 데이터 수집 버튼
+                    Button("Collect Data") {
+                        dataCollector.collectUserData { userData in
+                            var displayText = ""
+                            displayText += "IP 기반 위치: \(userData.ipLatitude ?? 0), \(userData.ipLongitude ?? 0)\n"
+                            displayText += "네트워크 타입: \(userData.networkType)\n"
+                            displayText += "디바이스: \(userData.deviceType)\n"
+                            displayText += "시스템: \(userData.systemName) \(userData.systemVersion)\n"
+                            displayText += "모델: \(userData.model)\n"
+                            displayText += "배터리: \(Int(userData.batteryLevel * 100))% (상태: \(batteryStateDescription(userData.batteryState)))\n"
+                            if let cpuUsage = userData.cpuUsage {
+                                displayText += "CPU 사용률: \(cpuUsage)%\n"
+                            }
+                            if let memoryUsage = userData.memoryUsage {
+                                displayText += "메모리 사용량: \(memoryUsage) bytes\n"
+                            }
+                            
+                            DispatchQueue.main.async {
+                                userDataText = displayText
+                            }
+                        }
+                    }
+                    
+                    // 1초마다 UDP 패킷 전송 시작
+                    Button("Start Sending") {
+                        udpSender.startContinuousSending()
+                    }
+                    
+                    // 전송 중단
+                    Button("Stop Sending") {
+                        udpSender.stopContinuousSending()
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("User Data & UDP Sender")
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+

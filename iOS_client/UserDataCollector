@@ -1,10 +1,3 @@
-//
-//  UserDataCollector.swift
-//  UserDataCollectorApp
-//
-//  Created by 김수오 on 2/20/25.
-//
-
 import UIKit
 import Network
 import Darwin.Mach
@@ -137,9 +130,8 @@ func getDeviceInfo() -> (deviceType: String, systemName: String, systemVersion: 
             model: deviceModelName())
 }
 
-// 배터리 정보를 반환하는 함수 (보정 로직 삭제)
-// UIDevice.BatteryState의 raw value는 다음과 같습니다:
-// 0: .unknown, 1: .unplugged, 2: .charging, 3: .full
+// 배터리 정보를 반환하는 함수
+// UIDevice.BatteryState의 raw value: 0: unknown, 1: unplugged, 2: charging, 3: full
 func getBatteryInfo() -> (level: Float, state: UIDevice.BatteryState) {
     let device = UIDevice.current
     device.isBatteryMonitoringEnabled = true

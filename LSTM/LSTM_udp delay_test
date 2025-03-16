@@ -1,0 +1,99 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import LSTM, Dense, Input, Concatenate
+
+# ------------------------------
+# 1, 데이터 생성 (UDP 딜레이 = 시계열, 사용자 데이터 = 정적)
+# ------------------------------
+num_samples = 1000  # 데이터 개수
+SEQ_LENGTH = 10  # 시퀀스 길이
+FEATURES_TIME = 1  # 시계열 특성 개수 (UDP 딜레이만 LSTM에 입력)
+FEATURES_STATIC = 8  # 정적 특성 개수 (사용자 데이터)
+
+# UDP 패킷 딜레이 (시계열 데이터)
+udp_delays = np.random.uniform(0, 500, num_samples).reshape(-1, 1)
+
+# 사용자 데이터 (정적 데이터, 랜덤 값 사용)
+user_data = np.random.rand(num_samples, FEATURES_STATIC)  
+
+# UDP 딜레이 데이터 정규화
+scaler_delay = MinMaxScaler()
+udp_delays_scaled = scaler_delay.fit_transform(udp_delays)
+
+# 사용자 데이터 정규화
+scaler_user = MinMaxScaler()
+user_data_scaled = scaler_user.fit_transform(user_data)
+
+# ------------------------------
+# 2. 시퀀스 데이터 생성 (UDP 딜레이만 사용)
+# ------------------------------
+def create_sequences(data, user_data, seq_length):
+    sequences, labels, user_static = [], [], []
+    for i in range(len(data) - seq_length):
+        sequences.append(data[i:i+seq_length])  # 과거 10개 시퀀스
+        labels.append(data[i+seq_length, 0])  # 예측값
+        user_static.append(user_data[i+seq_length])  # 정적 사용자 데이터 (한 개 샘플 사용)
+    return np.array(sequences), np.array(labels), np.array(user_static)
+
+# 시퀀스 데이터 변환
+X_time, y, X_static = create_sequences(udp_delays_scaled, user_data_scaled, SEQ_LENGTH)
+
+# 훈련/테스트 데이터 분리 (80% 훈련, 20% 테스트)
+split = int(len(X_time) * 0.8)
+X_train_time, X_test_time = X_time[:split], X_time[split:]
+X_train_static, X_test_static = X_static[:split], X_static[split:]
+y_train, y_test = y[:split], y[split:]
+
+# ------------------------------
+# 3. LSTM + Dense 모델 구성 (시계열 + 정적 데이터 결합)
+# ------------------------------
+# LSTM 입력 (UDP 딜레이 시계열)
+input_time = Input(shape=(SEQ_LENGTH, FEATURES_TIME))
+lstm_out = LSTM(64, return_sequences=False)(input_time)
+
+# 사용자 데이터 입력 (정적 데이터)
+input_static = Input(shape=(FEATURES_STATIC,))
+dense_out = Dense(32, activation='relu')(input_static)
+
+# LSTM 출력 + 사용자 데이터 출력 병합
+merged = Concatenate()([lstm_out, dense_out])
+
+# 최종 예측층
+output = Dense(1)(merged)
+
+# 모델 생성
+model = Model(inputs=[input_time, input_static], outputs=output)
+model.compile(optimizer='adam', loss='mse')
+
+# 모델 구조 출력
+model.summary()
+
+# ------------------------------
+# 4. 모델 학습
+# ------------------------------
+history = model.fit(
+    [X_train_time, X_train_static], y_train,
+    epochs=20, batch_size=16,
+    validation_data=([X_test_time, X_test_static], y_test)
+)
+
+# ------------------------------
+# 5. 예측 및 성능 평가
+# ------------------------------
+y_pred = model.predict([X_test_time, X_test_static])
+
+# 역정규화 (실제값 변환)
+y_test_inv = scaler_delay.inverse_transform(y_test.reshape(-1, 1))[:, 0]
+y_pred_inv = scaler_delay.inverse_transform(y_pred.reshape(-1, 1))[:, 0]
+
+# ------------------------------
+# 6. 예측 결과 시각화
+# ------------------------------
+plt.figure(figsize=(10, 5))
+plt.plot(y_test_inv, label='Actual UDP Delay', color='blue')
+plt.plot(y_pred_inv, label='Predicted UDP Delay', color='red')
+plt.legend()
+plt.title("UDP Delay Prediction (LSTM + User Data)")
+plt.show()

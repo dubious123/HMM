@@ -1,0 +1,105 @@
+import Foundation
+import Network
+import Combine
+
+class UDPSender {
+    private var connection: NWConnection?
+    private let host: NWEndpoint.Host
+    private let port: NWEndpoint.Port
+
+    init(host: String, port: UInt16) {
+        self.host = NWEndpoint.Host(host)
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            fatalError("Invalid port")
+        }
+        self.port = nwPort
+    }
+
+    func start() {
+        connection = NWConnection(host: host, port: port, using: .udp)
+        connection?.stateUpdateHandler = { newState in
+            print("UDP Connection state: \(newState)")
+        }
+        connection?.start(queue: .global())
+    }
+
+    func send(data: Data, completion: @escaping (Error?) -> Void) {
+        connection?.send(content: data, completion: .contentProcessed({ error in
+            if let error = error {
+                print("Error sending UDP data: \(error)")
+                completion(error)
+            } else {
+                print("UDP data sent successfully")
+                completion(nil)
+            }
+        }))
+    }
+
+    func stop() {
+        connection?.cancel()
+        connection = nil
+    }
+}
+
+class UDPSenderWrapper: ObservableObject {
+    private var sender: UDPSender
+    private var timer: Timer?
+    private var seqNum: UInt64 = 0
+    @Published var logText: String = ""
+
+    init() {
+        // IPv6 링크 로컬 주소와 포트 5050으로 설정 (zone id 포함)
+        sender = UDPSender(host: "fe80::7087:d734:b188:8dde%en0", port: 5050)
+        sender.start()
+        logText = "[UDP Sender Started]\n"
+    }
+    
+    func startContinuousSending() {
+        if timer != nil { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.sendNextPacket()
+        }
+        RunLoop.current.add(timer!, forMode: .common)
+    }
+    
+    private func sendNextPacket() {
+        seqNum += 1
+        let message = "Packet #\(seqNum)"
+        if let data = message.data(using: .utf8) {
+            sender.send(data: data) { [weak self] error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        self?.logText += "[Error sending packet #\(self?.seqNum ?? 0)]: \(error.localizedDescription)\n"
+                    } else {
+                        self?.logText += "[Sent packet #\(self?.seqNum ?? 0)]\n"
+                    }
+                }
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.logText += "[Error: Message encoding failed for packet #\(self?.seqNum ?? 0)]\n"
+            }
+        }
+    }
+    
+    func stopContinuousSending() {
+        timer?.invalidate()
+        timer = nil
+        logText += "[Stopped Sending]\n"
+    }
+    
+    // 수동 메시지 전송 (옵션)
+    func sendMessage(_ message: String, completion: @escaping (Error?) -> Void) {
+        if let data = message.data(using: .utf8) {
+            sender.send(data: data, completion: completion)
+        } else {
+            completion(NSError(domain: "UDPSenderWrapper", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid message encoding"]))
+        }
+    }
+    
+    deinit {
+        stopContinuousSending()
+        sender.stop()
+    }
+}
+
