@@ -4,7 +4,7 @@
 
 namespace
 {
-	constexpr auto server_addr = "2001:2d8:2029:f0cd:d3ca:dc7e:ed66:8e31";
+	constexpr auto server_addr = "fe80::dffa:bfeb:7029:918d";
 
 	auto send_socket	  = SOCKET {};
 	auto listen_socket	  = SOCKET {};
@@ -232,19 +232,19 @@ void client::handle_packet(void* p_mem, int32 recv_len)
 		auto delay = (p_packet->time_client_recv - p_packet->time_client_send) - (p_packet->time_server_send - p_packet->time_server_send);
 		logger::info("seq num : {}, delay : {}", p_packet->seq_num, delay);
 
-		send_queue.push([delay]() {
-			auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
-			assert(p_packet != nullptr);
-			{
-				p_packet->type		= 3;
-				p_packet->client_id = id;
-				p_packet->seq_num	= seq_num;
-				p_packet->delay		= delay;
-			}
+		send_queue.push({ [delay]() {
+							 auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
+							 assert(p_packet != nullptr);
+							 {
+								 p_packet->type		 = 6;
+								 p_packet->client_id = id;
+								 p_packet->seq_num	 = seq_num;
+								 p_packet->delay	 = delay;
+							 }
 
-			return std::tuple { (void*)p_packet, sizeof(packet_6) };
-		},
-						nullptr);
+							 return std::tuple { (void*)p_packet, sizeof(packet_6) };
+						 },
+						  nullptr });
 		break;
 	}
 	default:

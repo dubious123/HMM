@@ -1,34 +1,117 @@
-[2025-03-16 18:23:02.399] [Logger] [info] binding success, IPv6 Address: [2001:2d8:2029:f0cd:d3ca:dc7e:ed66:8e31]:5054, interface : Wi-Fi
-[2025-03-16 18:23:02.404] [Logger] [info] sending packet 0
-[2025-03-16 18:23:02.404] [Logger] [info] sending packet 3
-[2025-03-16 18:23:02.404] [Logger] [info] client: sending packet_type 3, seq_num : 0
-[2025-03-16 18:23:02.404] [Logger] [info] seq num : 0, delay : 147600
-[2025-03-16 18:23:03.407] [Logger] [info] sending packet 3
-[2025-03-16 18:23:03.407] [Logger] [info] client: sending packet_type 3, seq_num : 1
-[2025-03-16 18:23:03.407] [Logger] [info] seq num : 1, delay : 306000
-[2025-03-16 18:23:04.417] [Logger] [info] sending packet 3
-[2025-03-16 18:23:04.417] [Logger] [info] client: sending packet_type 3, seq_num : 2
-[2025-03-16 18:23:04.417] [Logger] [info] seq num : 2, delay : 411800
-[2025-03-16 18:23:05.424] [Logger] [info] sending packet 3
-[2025-03-16 18:23:05.424] [Logger] [info] client: sending packet_type 3, seq_num : 3
-[2025-03-16 18:23:05.424] [Logger] [info] seq num : 3, delay : 273700
-[2025-03-16 18:23:06.426] [Logger] [info] sending packet 3
-[2025-03-16 18:23:06.426] [Logger] [info] client: sending packet_type 3, seq_num : 4
-[2025-03-16 18:23:06.426] [Logger] [info] seq num : 4, delay : 572100
-[2025-03-16 18:23:07.427] [Logger] [info] sending packet 3
-[2025-03-16 18:23:07.427] [Logger] [info] client: sending packet_type 3, seq_num : 5
-[2025-03-16 18:23:07.427] [Logger] [info] seq num : 5, delay : 347000
-[2025-03-16 18:23:08.431] [Logger] [info] sending packet 3
-[2025-03-16 18:23:08.431] [Logger] [info] client: sending packet_type 3, seq_num : 6
-[2025-03-16 18:23:08.431] [Logger] [info] seq num : 6, delay : 518700
-[2025-03-16 18:23:09.440] [Logger] [info] sending packet 3
-[2025-03-16 18:23:09.440] [Logger] [info] client: sending packet_type 3, seq_num : 7
-[2025-03-16 18:23:09.441] [Logger] [info] seq num : 7, delay : 542500
-[2025-03-16 18:23:10.445] [Logger] [info] sending packet 3
-[2025-03-16 18:23:10.445] [Logger] [info] client: sending packet_type 3, seq_num : 8
-[2025-03-16 18:23:10.446] [Logger] [info] seq num : 8, delay : 461500
-[2025-03-16 18:23:11.447] [Logger] [info] sending packet 3
-[2025-03-16 18:23:11.447] [Logger] [info] client: sending packet_type 3, seq_num : 9
-[2025-03-16 18:23:11.448] [Logger] [info] seq num : 9, delay : 944200
-[2025-03-16 18:23:12.457] [Logger] [info] sending packet 3
-[2025-03-16 18:23:12.457] [Logger] [info] client: sending packet_type 3, seq_num : 10
+[2025-03-16 19:52:58.817] [Logger] [info] binding success, IPv6 Address: [fe80::dffa:bfeb:7029:918d%9]:5054, interface : 이더넷
+[2025-03-16 19:52:58.820] [Logger] [info] sending packet 0
+[2025-03-16 19:52:58.821] [Logger] [info] sending packet 3
+[2025-03-16 19:52:58.821] [Logger] [info] client: sending packet_type 3, seq_num : 0
+[2025-03-16 19:52:58.821] [Logger] [info] seq num : 0, delay : 107400
+[2025-03-16 19:52:58.821] [Logger] [info] sending packet 6
+[2025-03-16 19:52:59.834] [Logger] [info] sending packet 3
+[2025-03-16 19:52:59.834] [Logger] [info] client: sending packet_type 3, seq_num : 1
+[2025-03-16 19:52:59.834] [Logger] [info] seq num : 1, delay : 232900
+[2025-03-16 19:52:59.834] [Logger] [info] sending packet 6
+[2025-03-16 19:53:00.845] [Logger] [info] sending packet 3
+[2025-03-16 19:53:00.845] [Logger] [info] client: sending packet_type 3, seq_num : 2
+[2025-03-16 19:53:00.845] [Logger] [info] seq num : 2, delay : 289100
+[2025-03-16 19:53:00.845] [Logger] [info] sending packet 6
+[2025-03-16 19:53:01.858] [Logger] [info] sending packet 3
+[2025-03-16 19:53:01.858] [Logger] [info] client: sending packet_type 3, seq_num : 3
+[2025-03-16 19:53:01.858] [Logger] [info] seq num : 3, delay : 212600
+[2025-03-16 19:53:01.858] [Logger] [info] sending packet 6
+[2025-03-16 19:53:02.870] [Logger] [info] sending packet 3
+[2025-03-16 19:53:02.870] [Logger] [info] client: sending packet_type 3, seq_num : 4
+[2025-03-16 19:53:02.870] [Logger] [info] seq num : 4, delay : 217400
+[2025-03-16 19:53:02.870] [Logger] [info] sending packet 6
+[2025-03-16 19:53:03.880] [Logger] [info] sending packet 3
+[2025-03-16 19:53:03.881] [Logger] [info] client: sending packet_type 3, seq_num : 5
+[2025-03-16 19:53:03.881] [Logger] [info] seq num : 5, delay : 268600
+[2025-03-16 19:53:03.881] [Logger] [info] sending packet 6
+[2025-03-16 19:53:04.894] [Logger] [info] sending packet 3
+[2025-03-16 19:53:04.894] [Logger] [info] client: sending packet_type 3, seq_num : 6
+[2025-03-16 19:53:04.894] [Logger] [info] seq num : 6, delay : 302200
+[2025-03-16 19:53:04.894] [Logger] [info] sending packet 6
+[2025-03-16 19:53:05.905] [Logger] [info] sending packet 3
+[2025-03-16 19:53:05.905] [Logger] [info] client: sending packet_type 3, seq_num : 7
+[2025-03-16 19:53:05.905] [Logger] [info] seq num : 7, delay : 243000
+[2025-03-16 19:53:05.905] [Logger] [info] sending packet 6
+[2025-03-16 19:53:06.918] [Logger] [info] sending packet 3
+[2025-03-16 19:53:06.918] [Logger] [info] client: sending packet_type 3, seq_num : 8
+[2025-03-16 19:53:06.918] [Logger] [info] seq num : 8, delay : 243600
+[2025-03-16 19:53:06.919] [Logger] [info] sending packet 6
+[2025-03-16 19:53:07.919] [Logger] [info] sending packet 3
+[2025-03-16 19:53:07.919] [Logger] [info] client: sending packet_type 3, seq_num : 9
+[2025-03-16 19:53:07.920] [Logger] [info] seq num : 9, delay : 347100
+[2025-03-16 19:53:07.920] [Logger] [info] sending packet 6
+[2025-03-16 19:53:08.930] [Logger] [info] sending packet 3
+[2025-03-16 19:53:08.930] [Logger] [info] client: sending packet_type 3, seq_num : 10
+[2025-03-16 19:53:08.931] [Logger] [info] seq num : 10, delay : 328100
+[2025-03-16 19:53:08.931] [Logger] [info] sending packet 6
+[2025-03-16 19:53:09.943] [Logger] [info] sending packet 3
+[2025-03-16 19:53:09.943] [Logger] [info] client: sending packet_type 3, seq_num : 11
+[2025-03-16 19:53:09.943] [Logger] [info] seq num : 11, delay : 267800
+[2025-03-16 19:53:09.943] [Logger] [info] sending packet 6
+[2025-03-16 19:53:10.944] [Logger] [info] sending packet 3
+[2025-03-16 19:53:10.944] [Logger] [info] client: sending packet_type 3, seq_num : 12
+[2025-03-16 19:53:10.944] [Logger] [info] seq num : 12, delay : 273800
+[2025-03-16 19:53:10.944] [Logger] [info] sending packet 6
+[2025-03-16 19:53:11.957] [Logger] [info] sending packet 3
+[2025-03-16 19:53:11.957] [Logger] [info] client: sending packet_type 3, seq_num : 13
+[2025-03-16 19:53:11.957] [Logger] [info] seq num : 13, delay : 263600
+[2025-03-16 19:53:11.957] [Logger] [info] sending packet 6
+[2025-03-16 19:53:12.968] [Logger] [info] sending packet 3
+[2025-03-16 19:53:12.968] [Logger] [info] client: sending packet_type 3, seq_num : 14
+[2025-03-16 19:53:12.968] [Logger] [info] seq num : 14, delay : 382200
+[2025-03-16 19:53:12.968] [Logger] [info] sending packet 6
+[2025-03-16 19:53:13.980] [Logger] [info] sending packet 3
+[2025-03-16 19:53:13.980] [Logger] [info] client: sending packet_type 3, seq_num : 15
+[2025-03-16 19:53:13.980] [Logger] [info] seq num : 15, delay : 260500
+[2025-03-16 19:53:13.980] [Logger] [info] sending packet 6
+[2025-03-16 19:53:14.991] [Logger] [info] sending packet 3
+[2025-03-16 19:53:14.991] [Logger] [info] client: sending packet_type 3, seq_num : 16
+[2025-03-16 19:53:14.991] [Logger] [info] seq num : 16, delay : 267900
+[2025-03-16 19:53:14.991] [Logger] [info] sending packet 6
+[2025-03-16 19:53:16.006] [Logger] [info] sending packet 3
+[2025-03-16 19:53:16.006] [Logger] [info] client: sending packet_type 3, seq_num : 17
+[2025-03-16 19:53:16.006] [Logger] [info] seq num : 17, delay : 224900
+[2025-03-16 19:53:16.006] [Logger] [info] sending packet 6
+[2025-03-16 19:53:17.018] [Logger] [info] sending packet 3
+[2025-03-16 19:53:17.018] [Logger] [info] client: sending packet_type 3, seq_num : 18
+[2025-03-16 19:53:17.018] [Logger] [info] seq num : 18, delay : 260000
+[2025-03-16 19:53:17.019] [Logger] [info] sending packet 6
+[2025-03-16 19:53:18.031] [Logger] [info] sending packet 3
+[2025-03-16 19:53:18.031] [Logger] [info] client: sending packet_type 3, seq_num : 19
+[2025-03-16 19:53:18.031] [Logger] [info] seq num : 19, delay : 238200
+[2025-03-16 19:53:18.031] [Logger] [info] sending packet 6
+[2025-03-16 19:53:19.043] [Logger] [info] sending packet 3
+[2025-03-16 19:53:19.043] [Logger] [info] client: sending packet_type 3, seq_num : 20
+[2025-03-16 19:53:19.044] [Logger] [info] seq num : 20, delay : 312500
+[2025-03-16 19:53:19.044] [Logger] [info] sending packet 6
+[2025-03-16 19:53:20.054] [Logger] [info] sending packet 3
+[2025-03-16 19:53:20.054] [Logger] [info] client: sending packet_type 3, seq_num : 21
+[2025-03-16 19:53:20.054] [Logger] [info] seq num : 21, delay : 290700
+[2025-03-16 19:53:20.054] [Logger] [info] sending packet 6
+[2025-03-16 19:53:21.067] [Logger] [info] sending packet 3
+[2025-03-16 19:53:21.067] [Logger] [info] client: sending packet_type 3, seq_num : 22
+[2025-03-16 19:53:21.067] [Logger] [info] seq num : 22, delay : 278500
+[2025-03-16 19:53:21.067] [Logger] [info] sending packet 6
+[2025-03-16 19:53:22.082] [Logger] [info] sending packet 3
+[2025-03-16 19:53:22.082] [Logger] [info] client: sending packet_type 3, seq_num : 23
+[2025-03-16 19:53:22.082] [Logger] [info] seq num : 23, delay : 280000
+[2025-03-16 19:53:22.082] [Logger] [info] sending packet 6
+[2025-03-16 19:53:23.097] [Logger] [info] sending packet 3
+[2025-03-16 19:53:23.097] [Logger] [info] client: sending packet_type 3, seq_num : 24
+[2025-03-16 19:53:23.097] [Logger] [info] seq num : 24, delay : 276100
+[2025-03-16 19:53:23.098] [Logger] [info] sending packet 6
+[2025-03-16 19:53:24.110] [Logger] [info] sending packet 3
+[2025-03-16 19:53:24.110] [Logger] [info] client: sending packet_type 3, seq_num : 25
+[2025-03-16 19:53:24.110] [Logger] [info] seq num : 25, delay : 312000
+[2025-03-16 19:53:24.110] [Logger] [info] sending packet 6
+[2025-03-16 19:53:25.120] [Logger] [info] sending packet 3
+[2025-03-16 19:53:25.120] [Logger] [info] client: sending packet_type 3, seq_num : 26
+[2025-03-16 19:53:25.120] [Logger] [info] seq num : 26, delay : 306700
+[2025-03-16 19:53:25.120] [Logger] [info] sending packet 6
+[2025-03-16 19:53:26.134] [Logger] [info] sending packet 3
+[2025-03-16 19:53:26.134] [Logger] [info] client: sending packet_type 3, seq_num : 27
+[2025-03-16 19:53:26.134] [Logger] [info] seq num : 27, delay : 288900
+[2025-03-16 19:53:26.134] [Logger] [info] sending packet 6
+[2025-03-16 19:53:27.146] [Logger] [info] sending packet 3
+[2025-03-16 19:53:27.147] [Logger] [info] client: sending packet_type 3, seq_num : 28
+[2025-03-16 19:53:27.147] [Logger] [info] seq num : 28, delay
