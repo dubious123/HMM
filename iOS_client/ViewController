@@ -1,0 +1,76 @@
+//
+//  ViewController.swift
+//  UserDataCollectorApp
+//
+//  Created by 김수오 on 2/20/25.
+//
+
+import UIKit
+
+class ViewController: UIViewController {
+    // UserDataCollector 인스턴스 생성
+    let dataCollector = UserDataCollector()
+    
+    // 데이터를 표시할 UILabel 생성 (멀티라인)
+    let dataLabel: UILabel = {
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0  // 여러 줄 표시
+        label.textAlignment = .left
+        label.font = UIFont.systemFont(ofSize: 14)
+        label.textColor = .black
+        return label
+    }()
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // UI 설정: UILabel을 뷰에 추가하고 오토레이아웃 제약조건 설정
+        setupUI()
+        
+        // UserDataCollector를 사용해 데이터를 수집합니다.
+        dataCollector.collectUserData { [weak self] userData in
+            DispatchQueue.main.async {
+                // 콘솔 로그 출력
+                print("IP 기반 위치: \(userData.ipLatitude ?? 0), \(userData.ipLongitude ?? 0)")
+                print("네트워크 타입: \(userData.networkType)")
+                print("디바이스: \(userData.deviceType), \(userData.systemName) \(userData.systemVersion)")
+                print("모델: \(userData.model)")
+                print("배터리: \(userData.batteryLevel * 100)% (상태: \(userData.batteryState))")
+                if let cpuUsage = userData.cpuUsage {
+                    print("CPU 사용률: \(cpuUsage)%")
+                }
+                if let memoryUsage = userData.memoryUsage {
+                    print("메모리 사용량: \(memoryUsage) bytes")
+                }
+                
+                // UILabel에 표시할 텍스트 구성
+                var displayText = ""
+                displayText += "IP 기반 위치: \(userData.ipLatitude ?? 0), \(userData.ipLongitude ?? 0)\n"
+                displayText += "네트워크 타입: \(userData.networkType)\n"
+                displayText += "디바이스: \(userData.deviceType), \(userData.systemName) \(userData.systemVersion)\n"
+                displayText += "모델: \(userData.model)\n"
+                displayText += "배터리: \(userData.batteryLevel * 100)% (상태: \(userData.batteryState))\n"
+                if let cpuUsage = userData.cpuUsage {
+                    displayText += "CPU 사용률: \(cpuUsage)%\n"
+                }
+                if let memoryUsage = userData.memoryUsage {
+                    displayText += "메모리 사용량: \(memoryUsage) bytes\n"
+                }
+                
+                self?.dataLabel.text = displayText
+            }
+        }
+    }
+    
+    // dataLabel을 뷰에 추가하고, 오토레이아웃 제약조건을 설정하는 함수
+    func setupUI() {
+        view.addSubview(dataLabel)
+        NSLayoutConstraint.activate([
+            dataLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            dataLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            dataLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16)
+        ])
+    }
+}
+
