@@ -24,7 +24,7 @@ using int8	= int8_t;
 using float32  = float;
 using double64 = double;
 
-enum packet_type
+enum packet_type : unsigned short
 {
 	client_send,
 	server_recv,
@@ -35,14 +35,44 @@ enum packet_type
 
 LPSTR print_err(int err_code);
 
-struct packet
+// struct packet_0
+//{
+//	uint16 type = 0;
+//	uint16 name_len;
+//	char*  client_name;
+// };
+
+struct packet_1
 {
-	packet_type type			 = packet_type(0);
-	uint32		seq_num			 = 0;
-	uint64		time_client_send = 0;
-	uint64		time_server_recv = 0;
-	uint64		time_server_send = 0;
-	uint64		time_client_recv = 0;
+	uint16 type = 1;
+	char   res;
+	uint32 client_id;
+};
+
+struct packet_2
+{
+	uint16 type = 2;
+	char   res;
+	uint32 client_id;
+};
+
+struct packet_3
+{
+	uint16 type = 3;
+	uint32 client_id;
+	uint32 seq_num			= 0;
+	uint64 time_client_send = 0;
+	uint64 time_server_recv = 0;
+	uint64 time_server_send = 0;
+	uint64 time_client_recv = 0;
+};
+
+struct packet_6
+{
+	uint16 type = 6;
+	uint32 client_id;
+	uint32 seq_num = 0;
+	uint64 delay;
 };
 
 namespace net_core
@@ -144,4 +174,6 @@ namespace logger
 namespace utils
 {
 	std::string ip6addr_to_string(IN6_ADDR addr);
-}
+
+	uint64 time_now();
+}	 // namespace utils

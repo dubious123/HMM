@@ -69,7 +69,7 @@ private suspend fun sendUdpPackets() {
     try {
         DatagramSocket().use { socket ->
             while (true) {
-                val targetAddress: InetAddress = InetAddress.getByName("2001:2d8:f219:c1d2:917e:6c27:8798:dcdb")
+                val targetAddress: InetAddress = InetAddress.getByName("fe80::7087:d734:b188:8dde")
                 val targetPort: Int = 5050
                 // Define the message to send.
                 val now = Instant.now()

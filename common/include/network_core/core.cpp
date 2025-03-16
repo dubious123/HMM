@@ -64,6 +64,11 @@ std::string utils::ip6addr_to_string(IN6_ADDR addr)
 					   addr.u.Word[7]);
 }
 
+uint64 utils::time_now()
+{
+	return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
 {
 	auto flags	  = GAA_FLAG_INCLUDE_PREFIX;
