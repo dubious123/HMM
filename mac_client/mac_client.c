@@ -12,10 +12,13 @@
 
 // 패킷 구조체 정의
 struct packet {
-    uint64_t seq_num;
-    uint64_t time_client_send;
-    uint64_t time_server_send;
-    uint64_t time_client_recv;
+    uint8_t type;                  // 0: 요청, 1: 응답 등
+    uint64_t seq_num;              // 패킷 순번
+    uint64_t time_client_send;     // 클라이언트에서 전송한 시간 (ns 단위)
+    uint64_t time_server_receive;  // 서버에서 요청을 수신한 시간 (ns 단위)
+    uint64_t time_server_send;     // 서버에서 응답한 시간 (ns 단위)
+    uint64_t time_client_recv;     // 클라이언트에서 응답 수신 시간 (ns 단위)
+    uint64_t predicted_delay;      // 예측된 네트워크 딜레이 값 (ns 단위)
 };
 
 // 현재 시간을 ns 단위로 반환하는 함수
