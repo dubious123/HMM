@@ -367,4 +367,5 @@ _NCrunch*
 .vs/
 
 # Ignore log file
-Editor/EditorLog.txt
+Client/client_log.txt
+Server/server_log.txt
