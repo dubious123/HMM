@@ -286,7 +286,6 @@ void client::handle_packet(uint32 session_idx, void* p_mem, int32 recv_len)
 		auto delay = (p_packet->time_client_recv - p_packet->time_client_send) - (p_packet->time_server_send - p_packet->time_server_send);
 		logger::info("seq num : {}, delay : {}", p_packet->seq_num, delay);
 
-<<<<<<< HEAD
 		p_session->send_queue.push({ [id = p_session->c_id, delay, seq_num = p_packet->seq_num]() {
 										auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
 										assert(p_packet != nullptr);
@@ -300,21 +299,6 @@ void client::handle_packet(uint32 session_idx, void* p_mem, int32 recv_len)
 										return std::tuple { (void*)p_packet, sizeof(packet_6) };
 									},
 									 nullptr });
-		== == == =
-			send_queue.push({ [delay]() {
-								 auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
-								 assert(p_packet != nullptr);
-								 {
-									 p_packet->type		 = 6;
-									 p_packet->client_id = id;
-									 p_packet->seq_num	 = seq_num;
-									 p_packet->delay	 = delay;
-								 }
-
-								 return std::tuple { (void*)p_packet, sizeof(packet_6) };
-							 },
-							  nullptr });
->>>>>>> dbd1e63bd3fb0692dc889dcfa9763fe7e987310a
 		break;
 	}
 	default:
