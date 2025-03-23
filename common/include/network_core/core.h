@@ -77,7 +77,7 @@ struct packet_6
 
 namespace net_core
 {
-	bool bind(SOCKET sock, sockaddr_in6*, uint16 port);
+	std::vector<SOCKET> get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count = -1);
 }
 
 namespace logger

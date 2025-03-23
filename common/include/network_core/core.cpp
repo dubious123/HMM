@@ -1,6 +1,7 @@
 #include <print>
 #include <string>
 #include <format>
+#include <span>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -10,6 +11,8 @@
 
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_sinks.h>
+#include <spdlog/async.h>
+#include <spdlog/spdlog.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -33,15 +36,15 @@ namespace logger
 {
 	namespace detail
 	{
-		std::shared_ptr<spdlog::logger> _logger = std::make_shared<spdlog::logger>(spdlog::logger("Logger"));
+		std::shared_ptr<spdlog::logger> _logger;
 	}	 // namespace detail
 
 	void init(const char* output_file_name)
 	{
+		spdlog::init_thread_pool(1024, 1);
 		auto file_sink	  = std::make_shared<spdlog::sinks::basic_file_sink_st>(output_file_name, true);
 		auto console_sink = std::make_shared<spdlog::sinks::stdout_sink_st>();
-		detail::_logger->sinks().push_back(file_sink);
-		detail::_logger->sinks().push_back(console_sink);
+		detail::_logger	  = std::make_shared<spdlog::async_logger>(std::string("Logger"), spdlog::sinks_init_list { file_sink, console_sink }, spdlog::thread_pool(), spdlog::async_overflow_policy::block);
 	}
 
 	void clear()
@@ -69,50 +72,63 @@ uint64 utils::time_now()
 	return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
+std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count)
 {
+	auto socks	  = std::vector<SOCKET> {};
 	auto flags	  = GAA_FLAG_INCLUDE_PREFIX;
 	auto family	  = AF_INET6;
-	auto addr_buf = std::array<char, (sizeof(IP_ADAPTER_ADDRESSES) * 30)>();
-
-	// Get the adapter addresses.
-	auto buf_len = addr_buf.size();
-	auto ret	 = ::GetAdaptersAddresses(family, flags, NULL, (PIP_ADAPTER_ADDRESSES)addr_buf.data(), (PULONG)&buf_len);
+	auto addr_buf = std::vector<char>((sizeof(IP_ADAPTER_ADDRESSES) * 30));
+	auto buf_len  = addr_buf.size();
+	auto ret	  = ::GetAdaptersAddresses(family, flags, NULL, (PIP_ADAPTER_ADDRESSES)addr_buf.data(), (PULONG)&buf_len);
+	if (ret == ERROR_BUFFER_OVERFLOW)
+	{
+		addr_buf.resize(buf_len);
+		ret = ::GetAdaptersAddresses(family, flags, NULL, (PIP_ADAPTER_ADDRESSES)addr_buf.data(), (PULONG)&buf_len);
+	}
 	if (ret != NO_ERROR)
 	{
 		err_msg("GetAdaptersAddresses() failed");
-		return false;
+		return socks;
 	}
 
 	for (auto* adapter = (IP_ADAPTER_ADDRESSES*)(addr_buf.data()); adapter != nullptr; adapter = adapter->Next)
 	{
-		// if (adapter->IfType != 6 and adapter->IfType != 71)
-		//{
-		//	continue;
-		// }
-
-		if (adapter->IfType != 6 and _wcsnicmp(adapter->FriendlyName, L"Wi-Fi", 100) != 0)
+		if (adapter->OperStatus != IfOperStatusUp)
 		{
 			continue;
 		}
 
-		// logger::info(L"Adapter: {}", adapter->FriendlyName);
-		// logger::info(L"Interface Type: {}", adapter->IfType);
-
-		// todo
-		for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr; unicast = unicast->Next)
+		if (adapter->IfType != 0 and std::ranges::find(adapter_filter, adapter->IfType) == adapter_filter.end())
 		{
-			if (unicast->Address.lpSockaddr->sa_family != AF_INET6)
+			continue;
+		}
+
+		for (auto* p_unicast = adapter->FirstUnicastAddress; p_unicast != nullptr; p_unicast = p_unicast->Next)
+		{
+			if (p_unicast->Address.lpSockaddr->sa_family != AF_INET6)
 			{
 				continue;
 			}
 
-			*p_out_addr			  = *(sockaddr_in6*)(unicast->Address.lpSockaddr);
-			p_out_addr->sin6_port = ::htons(port);
-
-			if (::bind(sock, (sockaddr*)p_out_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			auto sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+			if (sock == INVALID_SOCKET)
 			{
-				// err_msg("bind() failed");
+				err_msg("socket creation failed");
+				continue;
+			}
+
+			auto* addr		= (sockaddr_in6*)(p_unicast->Address.lpSockaddr);
+			auto  sock_addr = sockaddr_in6 {};
+			ZeroMemory(&sock_addr, sizeof(sock_addr));
+			sock_addr.sin6_family	= AF_INET6;
+			sock_addr.sin6_port		= htons(port);
+			sock_addr.sin6_addr		= addr->sin6_addr;
+			sock_addr.sin6_scope_id = addr->sin6_scope_id;	  // Needed for link-local addresses.
+
+			if (::bind(sock, (sockaddr*)&sock_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			{
+				err_msg("bind failed");
+				::closesocket(sock);
 				continue;
 			}
 
@@ -120,16 +136,20 @@ bool net_core::bind(SOCKET sock, sockaddr_in6* p_out_addr, uint16 port)
 			wchar_t p_wstr_ipv6[INET6_ADDRSTRLEN] = { 0 };
 
 			// Convert the IPv6 address to a string.
-			if (::WSAAddressToStringW((LPSOCKADDR)p_out_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
+			if (::WSAAddressToStringW((LPSOCKADDR)&sock_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
 			{
-				logger::info(L"binding success, IPv6 Address: {}, interface : {}", p_wstr_ipv6, adapter->FriendlyName);
+				logger::info(L"binding success, IPv6 Address: {}, interface description : {}", p_wstr_ipv6, adapter->Description);
 			}
 
+			socks.emplace_back(sock);
 
-			return true;
+			if (socks.size() >= max_count)
+			{
+				return socks;
+			}
 		}
 		// logger::info("=====================================================");
 	}
 
-	return false;
+	return socks;
 }

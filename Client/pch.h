@@ -10,5 +10,6 @@
 
 #include <array>
 #include <span>
+#include <ranges>
 
 #include <core.h>

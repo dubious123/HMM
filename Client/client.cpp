@@ -2,38 +2,62 @@
 #include "client.h"
 #include <concurrent_queue.h>
 
+struct session
+{
+	using t_send_queue = concurrency::concurrent_queue<std::tuple<std::function<std::tuple<void*, size_t>()>, std::function<void()>>>;
+
+	std::string	 name;
+	uint32		 c_id;
+	bool		 connected = false;
+	SOCKET		 sock;
+	t_send_queue send_queue;
+	char		 recv_buffer[1024];
+	uint32		 seq_num = 0;
+
+	std::thread send_thread;
+	std::thread recv_thread;
+	std::thread delay_thread;
+
+	session(SOCKET sock) : sock(sock), c_id(-1)
+	{
+	}
+};
+
 namespace
 {
-	constexpr auto server_addr = "2001:2d8:2029:f0cd:d3ca:dc7e:ed66:8e31";
+	// constexpr auto server_addr = "fe80::dffa:bfeb:7029:918d";
+	constexpr auto server_addr = "2001:2d8:2120:8c19:5b69:cd74:bc6d:466e";
 
-	auto send_socket	  = SOCKET {};
-	auto listen_socket	  = SOCKET {};
+	auto sessions		  = std::vector<session> {};
 	auto server_addr_info = sockaddr_in6 {};
-
-	char recv_buffer[1024];
-	auto send_msg = std::span("hi im client");
-
-	auto send_thread  = std::thread();
-	auto recv_thread  = std::thread();
-	auto delay_thread = std::thread();
 
 	auto sending = true;
 	auto recving = true;
 
-	auto id = (uint32)0;
+	const auto client_name = std::string("JH_computer");
 
-	auto client_name = std::string("JH_computer");
-
-	auto seq_num = (uint32)0;
 }	 // namespace
 
 namespace
 {
-	auto send_queue = concurrency::concurrent_queue<std::tuple<std::function<std::tuple<void*, size_t>()>, std::function<void()>>>();
-
-	void _send_loop()
+	std::string sockaddrToIPString(const sockaddr* sa, socklen_t salen)
 	{
-		auto func_tpl = std::tuple<std::function<std::tuple<void*, size_t>()>, std::function<void()>>();
+		char host[NI_MAXHOST] = { 0 };
+		// NI_NUMERICHOST forces the address to be returned in numeric form.
+		int result = getnameinfo(sa, salen, host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+		if (result != 0)
+		{
+			return "";
+		}
+		return std::string(host);
+	}
+
+	void _send_loop(uint32 idx)
+	{
+		auto* p_session	 = &sessions[idx];
+		auto  sock		 = p_session->sock;
+		auto& send_queue = p_session->send_queue;
+		auto  func_tpl	 = std::tuple<std::function<std::tuple<void*, size_t>()>, std::function<void()>>();
 		while (sending)
 		{
 			if (send_queue.try_pop(func_tpl) is_false)
@@ -43,9 +67,18 @@ namespace
 			auto&& [packet_func, callback_func] = func_tpl;
 
 			auto&& [p_packet, len] = packet_func();
-			logger::info("sending packet {}", *(uint16*)p_packet);
+
+			{
+				auto addr = sockaddr_in6 {};
+				auto len  = (int32)sizeof(sockaddr_in6);
+				getsockname(sock, (sockaddr*)&addr, &len);
+
+				logger::info("[{}] : sending packet {} from ip : {}", p_session->name, *(uint16*)p_packet, sockaddrToIPString((sockaddr*)&addr, len));
+			}
+
+
 			// p.time_client_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			if (sendto(send_socket, (char*)p_packet, len, 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			if (sendto(sock, (char*)p_packet, len, 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
 			{
 				err_msg("sendto() failed");
 			}
@@ -63,46 +96,57 @@ namespace
 		}
 	}
 
-	void _recv_loop()
+	void _recv_loop(uint32 idx)
 	{
+		auto* p_session	  = &sessions[idx];
+		auto  sock		  = p_session->sock;
+		auto& recv_buffer = p_session->recv_buffer;
+
+		logger::info("{} recv_loop begin", idx);
 		while (recving)
 		{
-			auto recv_len = ::recvfrom(listen_socket, recv_buffer, sizeof(recv_buffer), 0, nullptr, nullptr);
+			auto addr = sockaddr_in6 {};
+			auto len  = (int32)sizeof(sockaddr_in6);
+
+			auto recv_len = ::recvfrom(sock, recv_buffer, sizeof(recv_buffer), 0, (sockaddr*)&addr, &len);
+
+			logger::info("recved packet type {} with binded ip : {}", *(uint16*)recv_buffer, sockaddrToIPString((sockaddr*)&addr, len));
 			// assert(recv_len >= sizeof(uint16));
 
 			// auto* p_recv = (packet*)recv_buffer;
 			//  p_recv->time_client_recv = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			client::handle_packet(recv_buffer, recv_len);
+			client::handle_packet(idx, recv_buffer, recv_len);
 
 			// auto duration = std::chrono::nanoseconds(p_recv->time_client_recv - p_recv->time_server_send);
 			// logger::info("[client] : seq num : {}, server->client duration : {}ns", p_recv->seq_num, duration.count());
 		}
 	}
 
-	void _delay_loop()
+	void _delay_loop(uint32 idx)
 	{
 		// todo
+		auto* p_session = &sessions[idx];
 		while (true)
 		{
-			send_queue.push({ []() {
-								 auto* p_packet = (packet_3*)malloc(sizeof(packet_3));
-								 assert(p_packet != nullptr);
-								 {
-									 p_packet->type				= 3;
-									 p_packet->client_id		= id;
-									 p_packet->seq_num			= seq_num;
-									 p_packet->time_client_send = utils::time_now();
-									 p_packet->time_server_recv = 0;
-									 p_packet->time_server_send = 0;
-									 p_packet->time_client_recv = 0;
-								 }
+			p_session->send_queue.push({ [p_session]() {
+											auto* p_packet = (packet_3*)malloc(sizeof(packet_3));
+											assert(p_packet != nullptr);
+											{
+												p_packet->type			   = 3;
+												p_packet->client_id		   = p_session->c_id;
+												p_packet->seq_num		   = p_session->seq_num;
+												p_packet->time_client_send = utils::time_now();
+												p_packet->time_server_recv = 0;
+												p_packet->time_server_send = 0;
+												p_packet->time_client_recv = 0;
+											}
 
-								 return std::tuple { (void*)p_packet, sizeof(packet_3) };
-							 },
-							  []() {
-								  logger::info("client: sending packet_type {}, seq_num : {}", 3, seq_num);
-								  ++seq_num;
-							  } });
+											return std::tuple { (void*)p_packet, sizeof(packet_3) };
+										},
+										 [p_session]() {
+											 logger::info("[{}]: sending packet_type {}, seq_num : {}", p_session->name, 3, p_session->seq_num);
+											 ++p_session->seq_num;
+										 } });
 			Sleep(1000);
 		}
 	}
@@ -112,26 +156,14 @@ bool client::init()
 {
 	logger::init("client_log.txt");
 
-	auto wsa_data		  = WSADATA {};
-	auto client_addr_info = sockaddr_in6 {};
-
+	auto wsa_data = WSADATA {};
 	ZeroMemory(&server_addr_info, sizeof(server_addr_info));
-	ZeroMemory(recv_buffer, sizeof(recv_buffer));
 
 	if (::WSAStartup(MAKEWORD(2, 2), &wsa_data) != S_OK)
 	{
 		// std::print(std::format("{} {}", "WSA startup failed", "with error code {} : {}").c_str(), ::WSAGetLastError(), print_err(::WSAGetLastError()));
 		err_msg("WSA startup failed");
 		// std::print(, ::WSAGetLastError(), print_err(::WSAGetLastError()));
-		goto failed;
-	}
-
-	send_socket	  = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-	listen_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-
-	if (send_socket == INVALID_SOCKET or listen_socket == INVALID_SOCKET)
-	{
-		err_msg("socket creation failed");
 		goto failed;
 	}
 
@@ -143,28 +175,16 @@ bool client::init()
 		goto failed;
 	}
 
-	if (net_core::bind(listen_socket, &client_addr_info, PORT_CLIENT) is_false)
+	sessions =
+		net_core::get_binded_socks(PORT_CLIENT, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 })
+		| std::views::transform([](auto sock) { return session(sock); })
+		| std::ranges::to<std::vector>();
+
+	if (sessions.size() == 0)
 	{
-		err_msg("bind() failed");
+		err_msg("no binded sockets");
 		goto failed;
 	}
-
-	send_queue.push({ []() {
-						 char* p_packet = (char*)malloc(sizeof(uint16) + sizeof(uint16) + sizeof(char) * client_name.size());
-						 assert(p_packet != nullptr);
-						 {
-							 *(uint16*)p_packet					   = 0;
-							 *(uint16*)(p_packet + sizeof(uint16)) = (uint16)client_name.size();
-							 memcpy(p_packet + sizeof(uint16) * 2, client_name.c_str(), client_name.size());
-						 }
-						 return std::tuple { (void*)p_packet, sizeof(uint16) * 2 + sizeof(char) * client_name.size() };
-					 },
-					  nullptr });
-	// if (::connect(send_socket, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
-	//{
-	//	err_msg("connect() failed");
-	//	goto failed;
-	// }
 
 	return true;
 failed:
@@ -174,11 +194,31 @@ failed:
 
 void client::run()
 {
-	send_thread = std::thread(_send_loop);
-	recv_thread = std::thread(_recv_loop);
+	for (auto idx : std::views::iota(0ull, sessions.size()))
+	{
+		sessions[idx].send_queue.push({ [idx]() {
+										   sessions[idx].name = std::format("{}_{}", client_name, idx);
+										   auto& sock_name	  = sessions[idx].name;
+										   char* p_packet	  = (char*)malloc(sizeof(uint16) + sizeof(uint16) + sizeof(char) * sock_name.size());
+										   assert(p_packet != nullptr);
+										   {
+											   *(uint16*)p_packet					 = 0;
+											   *(uint16*)(p_packet + sizeof(uint16)) = (uint16)sock_name.size();
+											   memcpy(p_packet + sizeof(uint16) * 2, sock_name.c_str(), sock_name.size());
+										   }
+										   return std::tuple { (void*)p_packet, sizeof(uint16) * 2 + sizeof(char) * sock_name.size() };
+									   },
+										nullptr });
 
-	send_thread.join();
-	recv_thread.join();
+		sessions[idx].send_thread = std::thread(_send_loop, idx);
+		sessions[idx].recv_thread = std::thread(_recv_loop, idx);
+	}
+
+	for (auto idx : std::views::iota(0ull, sessions.size()))
+	{
+		sessions[idx].send_thread.join();
+		sessions[idx].recv_thread.join();
+	}
 }
 
 void client::deinit()
@@ -187,7 +227,7 @@ void client::deinit()
 	::WSACleanup();
 }
 
-void client::handle_packet(void* p_mem, int32 recv_len)
+void client::handle_packet(uint32 session_idx, void* p_mem, int32 recv_len)
 {
 	if (recv_len < sizeof(uint16))
 	{
@@ -195,7 +235,8 @@ void client::handle_packet(void* p_mem, int32 recv_len)
 		return;
 	}
 
-	auto packet_type = *(uint16*)p_mem;
+	auto  packet_type = *(uint16*)p_mem;
+	auto* p_session	  = &sessions[session_idx];
 
 	switch (packet_type)
 	{
@@ -203,7 +244,7 @@ void client::handle_packet(void* p_mem, int32 recv_len)
 	{
 		if (recv_len != sizeof(packet_1))
 		{
-			logger::error("invalid packet, packet type : {} but recv_len is {}", packet_type, recv_len);
+			logger::error("session idx : [{}] invalid packet, packet type : {} but recv_len is {}", session_idx, packet_type, recv_len);
 		}
 
 		auto* p_packet = (packet_1*)p_mem;
@@ -212,10 +253,23 @@ void client::handle_packet(void* p_mem, int32 recv_len)
 		{
 			logger::error("connect failed, error code : {}", p_packet->res);
 		}
+		logger::info("session idx [{}]: handing packet type {}, client_id {}", session_idx, packet_type, p_packet->client_id);
 
-		id = p_packet->client_id;
+		p_session->c_id = p_packet->client_id;
 
-		delay_thread = std::thread(_delay_loop);
+		p_session->send_queue.push({ [id = p_session->c_id]() {
+										auto* p_packet = (packet_2*)malloc(sizeof(packet_2));
+										assert(p_packet != nullptr);
+										{
+											p_packet->type		= 2;
+											p_packet->res		= 0;
+											p_packet->client_id = id;
+										}
+
+										return std::tuple { (void*)p_packet, sizeof(packet_2) };
+									},
+									 nullptr });
+		p_session->delay_thread = std::thread(_delay_loop, session_idx);
 		break;
 	}
 	case 3:
@@ -232,19 +286,19 @@ void client::handle_packet(void* p_mem, int32 recv_len)
 		auto delay = (p_packet->time_client_recv - p_packet->time_client_send) - (p_packet->time_server_send - p_packet->time_server_send);
 		logger::info("seq num : {}, delay : {}", p_packet->seq_num, delay);
 
-		send_queue.push([delay]() {
-			auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
-			assert(p_packet != nullptr);
-			{
-				p_packet->type		= 3;
-				p_packet->client_id = id;
-				p_packet->seq_num	= seq_num;
-				p_packet->delay		= delay;
-			}
+		p_session->send_queue.push({ [id = p_session->c_id, delay, seq_num = p_packet->seq_num]() {
+										auto* p_packet = (packet_6*)malloc(sizeof(packet_6));
+										assert(p_packet != nullptr);
+										{
+											p_packet->type		= 6;
+											p_packet->client_id = id;
+											p_packet->seq_num	= seq_num;
+											p_packet->delay		= delay;
+										}
 
-			return std::tuple { (void*)p_packet, sizeof(packet_6) };
-		},
-						nullptr);
+										return std::tuple { (void*)p_packet, sizeof(packet_6) };
+									},
+									 nullptr });
 		break;
 	}
 	default:
