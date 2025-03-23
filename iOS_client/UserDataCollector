@@ -1,251 +1,105 @@
-import UIKit
+import Foundation
 import Network
-import Darwin.Mach
+import Combine
 
-// MARK: - IP 기반 위치 수집
+class UDPSender {
+    private var connection: NWConnection?
+    private let host: NWEndpoint.Host
+    private let port: NWEndpoint.Port
 
-struct IPInfo: Decodable {
-    let loc: String?  // "위도,경도" 형식의 문자열
+    init(host: String, port: UInt16) {
+        self.host = NWEndpoint.Host(host)
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            fatalError("Invalid port")
+        }
+        self.port = nwPort
+    }
+
+    func start() {
+        connection = NWConnection(host: host, port: port, using: .udp)
+        connection?.stateUpdateHandler = { newState in
+            print("UDP Connection state: \(newState)")
+        }
+        connection?.start(queue: .global())
+    }
+
+    func send(data: Data, completion: @escaping (Error?) -> Void) {
+        connection?.send(content: data, completion: .contentProcessed({ error in
+            if let error = error {
+                print("Error sending UDP data: \(error)")
+                completion(error)
+            } else {
+                print("UDP data sent successfully")
+                completion(nil)
+            }
+        }))
+    }
+
+    func stop() {
+        connection?.cancel()
+        connection = nil
+    }
 }
 
-func fetchIPBasedLocation(completion: @escaping ((latitude: Double, longitude: Double)?) -> Void) {
-    guard let url = URL(string: "https://ipinfo.io/json") else {
-        completion(nil)
-        return
+class UDPSenderWrapper: ObservableObject {
+    private var sender: UDPSender
+    private var timer: Timer?
+    private var seqNum: UInt64 = 0
+    @Published var logText: String = ""
+
+    init() {
+        // IPv6 링크 로컬 주소와 포트 5050으로 설정 (zone id 포함)
+        sender = UDPSender(host: "fe80::dffa:bfeb:7029:918d%en0", port: 5050)
+        sender.start()
+        logText = "[UDP Sender Started]\n"
     }
     
-    let task = URLSession.shared.dataTask(with: url) { data, response, error in
-        guard let data = data, error == nil else {
-            completion(nil)
-            return
+    func startContinuousSending() {
+        if timer != nil { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.sendNextPacket()
         }
-        do {
-            let ipInfo = try JSONDecoder().decode(IPInfo.self, from: data)
-            if let loc = ipInfo.loc {
-                let parts = loc.split(separator: ",")
-                if parts.count == 2,
-                   let lat = Double(parts[0]),
-                   let lon = Double(parts[1]) {
-                    completion((lat, lon))
-                    return
+        RunLoop.current.add(timer!, forMode: .common)
+    }
+    
+    private func sendNextPacket() {
+        seqNum += 1
+        let message = "Packet #\(seqNum)"
+        if let data = message.data(using: .utf8) {
+            sender.send(data: data) { [weak self] error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        self?.logText += "[Error sending packet #\(self?.seqNum ?? 0)]: \(error.localizedDescription)\n"
+                    } else {
+                        self?.logText += "[Sent packet #\(self?.seqNum ?? 0)]\n"
+                    }
                 }
             }
-            completion(nil)
-        } catch {
-            completion(nil)
-        }
-    }
-    task.resume()
-}
-
-// MARK: - 네트워크 상태 감지
-
-class NetworkMonitor {
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "NetworkMonitor")
-    var connectionType: String = "Unknown"
-    
-    init() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            if path.usesInterfaceType(.wifi) {
-                self?.connectionType = "Wi‑Fi"
-            } else if path.usesInterfaceType(.cellular) {
-                self?.connectionType = "Cellular"
-            } else if path.usesInterfaceType(.wiredEthernet) {
-                self?.connectionType = "Ethernet"
-            } else {
-                self?.connectionType = "Other"
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.logText += "[Error: Message encoding failed for packet #\(self?.seqNum ?? 0)]\n"
             }
         }
-        monitor.start(queue: queue)
+    }
+    
+    func stopContinuousSending() {
+        timer?.invalidate()
+        timer = nil
+        logText += "[Stopped Sending]\n"
+    }
+    
+    // 수동 메시지 전송 (옵션)
+    func sendMessage(_ message: String, completion: @escaping (Error?) -> Void) {
+        if let data = message.data(using: .utf8) {
+            sender.send(data: data, completion: completion)
+        } else {
+            completion(NSError(domain: "UDPSenderWrapper", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid message encoding"]))
+        }
     }
     
     deinit {
-        monitor.cancel()
-    }
-}
-
-// MARK: - 디바이스 및 배터리 정보
-
-// 기기 모델 식별자를 얻는 함수 (예: "iPhone14,3")
-func getDeviceModelIdentifier() -> String {
-    var systemInfo = utsname()
-    uname(&systemInfo)
-    let mirror = Mirror(reflecting: systemInfo.machine)
-    let identifier = mirror.children.reduce("") { identifier, element in
-        guard let value = element.value as? Int8, value != 0 else { return identifier }
-        return identifier + String(UnicodeScalar(UInt8(value)))
-    }
-    return identifier
-}
-
-// 모델 식별자를 사람이 읽기 쉬운 이름으로 변환하는 함수
-func deviceModelName() -> String {
-    let identifier = getDeviceModelIdentifier()
-    switch identifier {
-    // iPhone 13 Series
-    case "iPhone14,2": return "iPhone 13 Pro"
-    case "iPhone14,3": return "iPhone 13 Pro Max"
-    case "iPhone14,4": return "iPhone 13 mini"
-    case "iPhone14,5": return "iPhone 13"
-        
-    // iPhone 14 Series (예시 매핑 - 실제 식별자는 다를 수 있음)
-    case "iPhone15,2": return "iPhone 14 Pro"
-    case "iPhone15,3": return "iPhone 14 Pro Max"
-    case "iPhone15,4": return "iPhone 14"
-    case "iPhone15,5": return "iPhone 14 Plus"
-        
-    // iPhone 15 Series (예시 매핑)
-    case "iPhone16,1": return "iPhone 15"
-    case "iPhone16,2": return "iPhone 15 Plus"
-    case "iPhone16,3": return "iPhone 15 Pro"
-    case "iPhone16,4": return "iPhone 15 Pro Max"
-        
-    // iPhone 16 Series (예시 매핑)
-    case "iPhone17,1": return "iPhone 16"
-    case "iPhone17,2": return "iPhone 16 Plus"
-    case "iPhone17,3": return "iPhone 16 Pro"
-    case "iPhone17,4": return "iPhone 16 Pro Max"
-        
-    default: return identifier
-    }
-}
-
-// UIDevice의 정보를 활용하되, deviceType은 "Mobile" 또는 "Computer"로 설정하고,
-// model은 deviceModelName()의 결과를 사용합니다.
-func getDeviceInfo() -> (deviceType: String, systemName: String, systemVersion: String, model: String) {
-    let device = UIDevice.current
-    let deviceType: String
-    switch device.userInterfaceIdiom {
-    case .phone, .pad:
-        deviceType = "Mobile"
-    case .mac:
-        deviceType = "Computer"
-    default:
-        deviceType = "Unknown"
-    }
-    return (deviceType: deviceType,
-            systemName: device.systemName,
-            systemVersion: device.systemVersion,
-            model: deviceModelName())
-}
-
-// 배터리 정보를 반환하는 함수
-// UIDevice.BatteryState의 raw value: 0: unknown, 1: unplugged, 2: charging, 3: full
-func getBatteryInfo() -> (level: Float, state: UIDevice.BatteryState) {
-    let device = UIDevice.current
-    device.isBatteryMonitoringEnabled = true
-    return (device.batteryLevel, device.batteryState)
-}
-
-// MARK: - 앱 리소스 사용량 (CPU, 메모리)
-
-// 앱 자체의 CPU 사용량을 측정하는 함수
-func cpuUsageForApp() -> Double? {
-    var kr: kern_return_t
-    var taskInfoCount = mach_msg_type_number_t(MemoryLayout<task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
-    var tinfo = task_basic_info()
-    
-    kr = withUnsafeMutablePointer(to: &tinfo) {
-        $0.withMemoryRebound(to: integer_t.self, capacity: Int(taskInfoCount)) {
-            task_info(mach_task_self_, task_flavor_t(TASK_BASIC_INFO), $0, &taskInfoCount)
-        }
-    }
-    
-    if kr != KERN_SUCCESS {
-        return nil
-    }
-    
-    var threadList: thread_act_array_t?
-    var threadCount = mach_msg_type_number_t(0)
-    
-    kr = task_threads(mach_task_self_, &threadList, &threadCount)
-    if kr != KERN_SUCCESS {
-        return nil
-    }
-    
-    var totalUsageOfCPU = 0.0
-    if let threadList = threadList {
-        for i in 0..<Int(threadCount) {
-            var threadInfoCount = mach_msg_type_number_t(THREAD_INFO_MAX)
-            var thinfo = [integer_t](repeating: 0, count: Int(threadInfoCount))
-            
-            kr = thread_info(threadList[i], thread_flavor_t(THREAD_BASIC_INFO), &thinfo, &threadInfoCount)
-            if kr != KERN_SUCCESS {
-                continue
-            }
-            let threadBasicInfo = withUnsafePointer(to: &thinfo) {
-                $0.withMemoryRebound(to: thread_basic_info.self, capacity: 1) { $0.pointee }
-            }
-            if threadBasicInfo.flags & TH_FLAGS_IDLE == 0 {
-                totalUsageOfCPU += Double(threadBasicInfo.cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
-            }
-        }
-        let size = vm_size_t(threadCount) * vm_size_t(MemoryLayout<thread_t>.size)
-        vm_deallocate(mach_task_self_, vm_address_t(bitPattern: threadList), size)
-    }
-    return totalUsageOfCPU
-}
-
-// 앱이 사용하는 메모리 양(바이트 단위)을 반환하는 함수
-func memoryUsageForApp() -> UInt64? {
-    var info = task_basic_info()
-    var count = mach_msg_type_number_t(MemoryLayout<task_basic_info_data_t>.size) / mach_msg_type_number_t(MemoryLayout<natural_t>.size)
-    
-    let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
-        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-            task_info(mach_task_self_, task_flavor_t(TASK_BASIC_INFO), $0, &count)
-        }
-    }
-    
-    if kerr == KERN_SUCCESS {
-        return UInt64(info.resident_size)
-    } else {
-        return nil
-    }
-}
-
-// MARK: - 전체 User Data 구조체 및 수집 클래스
-
-struct UserData {
-    var ipLatitude: Double?
-    var ipLongitude: Double?
-    var networkType: String
-    var deviceType: String      // "Mobile" 또는 "Computer"
-    var systemName: String
-    var systemVersion: String
-    var model: String           // 구체적인 iPhone 모델명
-    var batteryLevel: Float
-    var batteryState: UIDevice.BatteryState
-    var cpuUsage: Double?
-    var memoryUsage: UInt64?
-}
-
-class UserDataCollector {
-    private let networkMonitor = NetworkMonitor()
-    
-    func collectUserData(completion: @escaping (UserData) -> Void) {
-        fetchIPBasedLocation { [weak self] location in
-            let deviceInfo = getDeviceInfo()
-            let batteryInfo = getBatteryInfo()
-            let cpu = cpuUsageForApp()
-            let memory = memoryUsageForApp()
-            
-            let userData = UserData(
-                ipLatitude: location?.latitude,
-                ipLongitude: location?.longitude,
-                networkType: self?.networkMonitor.connectionType ?? "Unknown",
-                deviceType: deviceInfo.deviceType,
-                systemName: deviceInfo.systemName,
-                systemVersion: deviceInfo.systemVersion,
-                model: deviceInfo.model,
-                batteryLevel: batteryInfo.level,
-                batteryState: batteryInfo.state,
-                cpuUsage: cpu,
-                memoryUsage: memory
-            )
-            completion(userData)
-        }
+        stopContinuousSending()
+        sender.stop()
     }
 }
 
