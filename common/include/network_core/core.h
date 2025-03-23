@@ -78,7 +78,8 @@ struct packet_6
 namespace net_core
 {
 	std::vector<SOCKET> get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count = -1);
-}
+	std::string			sockaddr_to_str(const sockaddr* sa, socklen_t salen);
+}	 // namespace net_core
 
 namespace logger
 {

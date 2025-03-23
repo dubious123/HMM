@@ -153,3 +153,15 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 
 	return socks;
 }
+
+std::string net_core::sockaddr_to_str(const sockaddr* sa, socklen_t salen)
+{
+	char host[NI_MAXHOST] = { 0 };
+	// NI_NUMERICHOST forces the address to be returned in numeric form.
+	int result = getnameinfo(sa, salen, host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+	if (result != 0)
+	{
+		return "";
+	}
+	return std::string(host);
+}

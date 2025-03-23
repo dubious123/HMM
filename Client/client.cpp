@@ -40,18 +40,6 @@ namespace
 
 namespace
 {
-	std::string sockaddrToIPString(const sockaddr* sa, socklen_t salen)
-	{
-		char host[NI_MAXHOST] = { 0 };
-		// NI_NUMERICHOST forces the address to be returned in numeric form.
-		int result = getnameinfo(sa, salen, host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
-		if (result != 0)
-		{
-			return "";
-		}
-		return std::string(host);
-	}
-
 	void _send_loop(uint32 idx)
 	{
 		auto* p_session	 = &sessions[idx];
@@ -67,15 +55,6 @@ namespace
 			auto&& [packet_func, callback_func] = func_tpl;
 
 			auto&& [p_packet, len] = packet_func();
-
-			{
-				auto addr = sockaddr_in6 {};
-				auto len  = (int32)sizeof(sockaddr_in6);
-				getsockname(sock, (sockaddr*)&addr, &len);
-
-				logger::info("[{}] : sending packet {} from ip : {}", p_session->name, *(uint16*)p_packet, sockaddrToIPString((sockaddr*)&addr, len));
-			}
-
 
 			// p.time_client_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 			if (sendto(sock, (char*)p_packet, len, 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
@@ -105,12 +84,8 @@ namespace
 		logger::info("{} recv_loop begin", idx);
 		while (recving)
 		{
-			auto addr = sockaddr_in6 {};
-			auto len  = (int32)sizeof(sockaddr_in6);
-
-			auto recv_len = ::recvfrom(sock, recv_buffer, sizeof(recv_buffer), 0, (sockaddr*)&addr, &len);
-
-			logger::info("recved packet type {} with binded ip : {}", *(uint16*)recv_buffer, sockaddrToIPString((sockaddr*)&addr, len));
+			// auto recv_len = ::recvfrom(sock, recv_buffer, sizeof(recv_buffer), 0, (sockaddr*)&addr, &len);
+			auto recv_len = ::recvfrom(sock, recv_buffer, sizeof(recv_buffer), 0, nullptr, nullptr);
 			// assert(recv_len >= sizeof(uint16));
 
 			// auto* p_recv = (packet*)recv_buffer;
@@ -253,7 +228,7 @@ void client::handle_packet(uint32 session_idx, void* p_mem, int32 recv_len)
 		{
 			logger::error("connect failed, error code : {}", p_packet->res);
 		}
-		logger::info("session idx [{}]: handing packet type {}, client_id {}", session_idx, packet_type, p_packet->client_id);
+		// logger::info("session idx [{}]: handing packet type {}, client_id {}", session_idx, packet_type, p_packet->client_id);
 
 		p_session->c_id = p_packet->client_id;
 
@@ -284,7 +259,7 @@ void client::handle_packet(uint32 session_idx, void* p_mem, int32 recv_len)
 		p_packet->time_client_recv = utils::time_now();
 
 		auto delay = (p_packet->time_client_recv - p_packet->time_client_send) - (p_packet->time_server_send - p_packet->time_server_send);
-		logger::info("seq num : {}, delay : {}", p_packet->seq_num, delay);
+		logger::info("[{}] seq num : {}, delay : {}", p_session->name, p_packet->seq_num, delay);
 
 		p_session->send_queue.push({ [id = p_session->c_id, delay, seq_num = p_packet->seq_num]() {
 										auto* p_packet = (packet_6*)malloc(sizeof(packet_6));

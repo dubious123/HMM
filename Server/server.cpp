@@ -381,18 +381,6 @@ void server::deinit()
 	::WSACleanup();
 }
 
-std::string sockaddrToIPString(const sockaddr* sa, socklen_t salen)
-{
-	char host[NI_MAXHOST] = { 0 };
-	// NI_NUMERICHOST forces the address to be returned in numeric form.
-	int result = getnameinfo(sa, salen, host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
-	if (result != 0)
-	{
-		return "";
-	}
-	return std::string(host);
-}
-
 void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 {
 
@@ -402,9 +390,6 @@ void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 		return;
 	}
 	auto packet_type = *(uint16*)p_mem;
-
-	auto addr_str = sockaddrToIPString((sockaddr*)p_addr, sizeof(sockaddr_in6));
-	logger::info("handling packet type {} form addr {}", packet_type, addr_str);
 
 	switch (packet_type)
 	{
@@ -429,7 +414,7 @@ void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 		// send_queue.push({ (void*)&send_packet, sizeof(packet_1), p_addr });
 
 		send_queue.push(
-			[id = client_id, addr = *p_addr, addr_str]() {
+			[id = client_id, addr = *p_addr]() {
 				auto* p_packet = (packet_1*)malloc(sizeof(packet_1));
 				assert(p_packet != nullptr);
 				{
@@ -438,7 +423,7 @@ void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 					p_packet->client_id = id;
 				}
 
-				logger::info("server : sending {} bytes to {}, id : {}, addr : {}", sizeof(packet_1), sessions[id].c_name, id, addr_str);
+				logger::info("server : sending {} bytes to {}, id : {}", sizeof(packet_1), sessions[id].c_name, id);
 
 				return std::tuple { (void*)p_packet, sizeof(packet_1), addr };
 			});
