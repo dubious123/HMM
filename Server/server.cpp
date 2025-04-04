@@ -11,7 +11,7 @@ struct c_session
 	uint32		c_id;
 	bool		connected = false;
 
-	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) {};
+	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) { };
 };
 
 struct iocp_key_wsa_recv
@@ -304,7 +304,7 @@ bool server::init()
 	}
 
 	{
-		auto socks = net_core::get_binded_socks(PORT_SERVER, { /*IF_TYPE_ETHERNET_CSMACD,*/ IF_TYPE_IEEE80211 }, 1);
+		auto socks = net_core::get_binded_socks(PORT_SERVER, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 }, 1);
 		if (socks.size() == 0)
 		{
 			err_msg("bind() failed");

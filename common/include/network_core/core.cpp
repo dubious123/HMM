@@ -72,6 +72,13 @@ uint64 utils::time_now()
 	return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+bool is_link_local(const IN6_ADDR& addr)
+{
+	// Link-local addresses start with fe80::/10.
+	// Check if the first 8 bits are 0xfe and the next 2 bits are 10.
+	return (addr.u.Byte[0] == 0xfe) && ((addr.u.Byte[1] & 0xc0) == 0x80);
+}
+
 std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count)
 {
 	auto socks	  = std::vector<SOCKET> {};
@@ -105,10 +112,32 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 
 		for (auto* p_unicast = adapter->FirstUnicastAddress; p_unicast != nullptr; p_unicast = p_unicast->Next)
 		{
+			auto* p_addr = (sockaddr_in6*)(p_unicast->Address.lpSockaddr);
+
 			if (p_unicast->Address.lpSockaddr->sa_family != AF_INET6)
 			{
 				continue;
 			}
+
+			// if (::IN6_IS_ADDR_LINKLOCAL(&p_addr->sin6_addr))
+			//{
+			//	continue;
+			// }
+			if (is_link_local(p_addr->sin6_addr))
+			{
+				continue;
+			}
+
+			//{
+			//	auto	wstr_len					  = (DWORD)INET6_ADDRSTRLEN;
+			//	wchar_t p_wstr_ipv6[INET6_ADDRSTRLEN] = { 0 };
+
+			//	// Convert the IPv6 address to a string.
+			//	if (::WSAAddressToStringW((LPSOCKADDR)&p_addr->sin6_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
+			//	{
+			//		logger::info(L"binding success, IPv6 Address: {}, interface description : {}", p_wstr_ipv6, adapter->Description);
+			//	}
+			//}
 
 			auto sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 			if (sock == INVALID_SOCKET)
@@ -117,13 +146,12 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 				continue;
 			}
 
-			auto* addr		= (sockaddr_in6*)(p_unicast->Address.lpSockaddr);
-			auto  sock_addr = sockaddr_in6 {};
+			auto sock_addr = sockaddr_in6 {};
 			ZeroMemory(&sock_addr, sizeof(sock_addr));
 			sock_addr.sin6_family	= AF_INET6;
 			sock_addr.sin6_port		= htons(port);
-			sock_addr.sin6_addr		= addr->sin6_addr;
-			sock_addr.sin6_scope_id = addr->sin6_scope_id;	  // Needed for link-local addresses.
+			sock_addr.sin6_addr		= p_addr->sin6_addr;
+			sock_addr.sin6_scope_id = p_addr->sin6_scope_id;	// Needed for link-local addresses.
 
 			if (::bind(sock, (sockaddr*)&sock_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
 			{
