@@ -10,7 +10,7 @@
 #include <errno.h>
 #include "bind.h"  // get_binded_socks 함수가 정의되어 있다고 가정
 
-#define SERVER_IP   "2001:2d8:2214:9e87:c3a8:5f41:3f77:338d"  // 서버 IPv6 주소
+#define SERVER_IP   "2001:2d8:f088:b940:9de2:c1d7:fc91:99b4"  // 서버 IPv6 주소
 #define SERVER_PORT 5050                                        // 서버 포트 번호
 #define CLIENT_PORT 5054                                        // 클라이언트 포트 번호
 #define CLIENT_NAME "Mac_Client"
@@ -173,6 +173,7 @@ void* session_receive(void* arg) {
 int main() {
     printf("Multi-session client starting...\n");
 
+
     // get_binded_socks()로 바인딩된 소켓들을 가져옴
     socket_array sock_arr = get_binded_socks(CLIENT_PORT, 10);
     if(sock_arr.count == 0) {
@@ -206,7 +207,7 @@ int main() {
         sessions[i].seq_num = 0;
         sessions[i].client_id = 0;
         sessions[i].is_connected = 0;
-        sessions[i].delay_thread = 0; // 아직 생성되지 않음
+        sessions[i].delay_thread = NULL; // 아직 생성되지 않음
 
         Packet_0 init_packet;
         init_packet.type = 0;
