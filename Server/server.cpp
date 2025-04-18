@@ -11,7 +11,7 @@ struct c_session
 	uint32		c_id;
 	bool		connected = false;
 
-	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) { };
+	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) {};
 };
 
 struct iocp_key_wsa_recv
@@ -245,7 +245,6 @@ namespace
 
 			// memset(p_session->recv_buf.data(), 0, p_session->recv_buf.size());
 
-
 			server::handle_packet(p_mem, recv_len, &p_recv_io_data->client_addr);
 
 			res = ::WSARecvFrom(listen_socket,
@@ -287,8 +286,8 @@ bool server::init()
 		goto failed;
 	}
 
-	send_socket	  = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-	listen_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	send_socket	  = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	listen_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	if (send_socket == INVALID_SOCKET or listen_socket == INVALID_SOCKET)
 	{
@@ -304,7 +303,7 @@ bool server::init()
 	}
 
 	{
-		auto socks = net_core::get_binded_socks(PORT_SERVER, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 }, 1);
+		auto socks = net_core::get_binded_socks(PORT_SERVER, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 }, 10);
 		if (socks.size() == 0)
 		{
 			err_msg("bind() failed");
@@ -383,7 +382,6 @@ void server::deinit()
 
 void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 {
-
 	if (recv_len < sizeof(uint16))
 	{
 		logger::error("invalid packet, recv_len is {}", recv_len);
@@ -399,8 +397,8 @@ void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
 		if (recv_len != sizeof(uint16) * 2 + name_len)
 		{
 			logger::error("invalid packet, packet type : {} but recv_len is {}", packet_type, recv_len);
+			return;
 		}
-
 
 		static auto session_mutex = std::mutex {};
 

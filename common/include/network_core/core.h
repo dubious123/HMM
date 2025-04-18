@@ -8,8 +8,8 @@
 
 #define err_msg(msg) logger::error(msg "with error code {} : {}", ::WSAGetLastError(), std::string(print_err(::WSAGetLastError())))
 
-#define PORT_SERVER 5050
-#define PORT_CLIENT 5054
+#define PORT_SERVER 12345
+#define PORT_CLIENT 12346
 
 using uint64 = uint64_t;
 using uint32 = uint32_t;

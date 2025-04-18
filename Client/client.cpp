@@ -26,10 +26,11 @@ struct session
 namespace
 {
 	// constexpr auto server_addr = "fe80::dffa:bfeb:7029:918d";
-	constexpr auto server_addr = "2001:2d8:2120:8c19:5b69:cd74:bc6d:466e";
+	constexpr auto server_addr = "172.30.1.3";
+	// constexpr auto								   server_addr = "2001:2d8:2120:8c19:5b69:cd74:bc6d:466e";
 
 	auto sessions		  = std::vector<session> {};
-	auto server_addr_info = sockaddr_in6 {};
+	auto server_addr_info = sockaddr_in {};
 
 	auto sending = true;
 	auto recving = true;
@@ -142,9 +143,9 @@ bool client::init()
 		goto failed;
 	}
 
-	server_addr_info.sin6_family = AF_INET6;
-	server_addr_info.sin6_port	 = ::htons(PORT_SERVER);
-	if (inet_pton(AF_INET6, server_addr, &server_addr_info.sin6_addr) != 1)
+	server_addr_info.sin_family = AF_INET;
+	server_addr_info.sin_port	= ::htons(PORT_SERVER);
+	if (inet_pton(AF_INET, server_addr, &server_addr_info.sin_addr) != 1)
 	{
 		err_msg("inet_pton() failed");
 		goto failed;

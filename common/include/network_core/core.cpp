@@ -79,11 +79,18 @@ bool is_link_local(const IN6_ADDR& addr)
 	return (addr.u.Byte[0] == 0xfe) && ((addr.u.Byte[1] & 0xc0) == 0x80);
 }
 
+bool is_link_local(const IN_ADDR& addr)
+{
+	uint32_t ip = ntohl(addr.s_addr);
+	// 169.254.0.0/16 ¡æ first 16 bits: 0xA9FE0000
+	return (ip & 0xFFFF0000) == 0xA9FE0000;
+}
+
 std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count)
 {
 	auto socks	  = std::vector<SOCKET> {};
 	auto flags	  = GAA_FLAG_INCLUDE_PREFIX;
-	auto family	  = AF_INET6;
+	auto family	  = AF_INET;
 	auto addr_buf = std::vector<char>((sizeof(IP_ADAPTER_ADDRESSES) * 30));
 	auto buf_len  = addr_buf.size();
 	auto ret	  = ::GetAdaptersAddresses(family, flags, NULL, (PIP_ADAPTER_ADDRESSES)addr_buf.data(), (PULONG)&buf_len);
@@ -105,6 +112,11 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 			continue;
 		}
 
+		if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+		{
+			continue;
+		}
+
 		if (adapter->IfType != 0 and std::ranges::find(adapter_filter, adapter->IfType) == adapter_filter.end())
 		{
 			continue;
@@ -112,9 +124,9 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 
 		for (auto* p_unicast = adapter->FirstUnicastAddress; p_unicast != nullptr; p_unicast = p_unicast->Next)
 		{
-			auto* p_addr = (sockaddr_in6*)(p_unicast->Address.lpSockaddr);
+			auto* p_addr = (sockaddr_in*)(p_unicast->Address.lpSockaddr);
 
-			if (p_unicast->Address.lpSockaddr->sa_family != AF_INET6)
+			if (p_unicast->Address.lpSockaddr->sa_family != AF_INET)
 			{
 				continue;
 			}
@@ -123,7 +135,7 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 			//{
 			//	continue;
 			// }
-			if (is_link_local(p_addr->sin6_addr))
+			if (is_link_local(p_addr->sin_addr))
 			{
 				continue;
 			}
@@ -139,35 +151,49 @@ std::vector<SOCKET> net_core::get_binded_socks(uint16 port, std::initializer_lis
 			//	}
 			//}
 
-			auto sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+			auto sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (sock == INVALID_SOCKET)
 			{
 				err_msg("socket creation failed");
 				continue;
 			}
 
-			auto sock_addr = sockaddr_in6 {};
-			ZeroMemory(&sock_addr, sizeof(sock_addr));
-			sock_addr.sin6_family	= AF_INET6;
-			sock_addr.sin6_port		= htons(port);
-			sock_addr.sin6_addr		= p_addr->sin6_addr;
-			sock_addr.sin6_scope_id = p_addr->sin6_scope_id;	// Needed for link-local addresses.
+			auto sock_addr = sockaddr_in {};
+			sock_addr	   = *p_addr;
+			// ZeroMemory(&sock_addr, sizeof(sock_addr));
+			// sock_addr.sin_family = AF_INET;
+			sock_addr.sin_port = htons(port);
+			// sock_addr.sin_addr	 = p_addr->sin_addr;
+			//  sock_addr.sin6_scope_id = p_addr->sin6_scope_id;	// Needed for link-local addresses.
 
-			if (::bind(sock, (sockaddr*)&sock_addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			if (::bind(sock, (sockaddr*)&sock_addr, sizeof(sockaddr_in)) == SOCKET_ERROR)
 			{
 				err_msg("bind failed");
 				::closesocket(sock);
 				continue;
 			}
 
-			auto	wstr_len					  = (DWORD)INET6_ADDRSTRLEN;
-			wchar_t p_wstr_ipv6[INET6_ADDRSTRLEN] = { 0 };
 
-			// Convert the IPv6 address to a string.
-			if (::WSAAddressToStringW((LPSOCKADDR)&sock_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
+			if constexpr (sizeof(sock_addr) == sizeof(sockaddr_in6))
 			{
-				logger::info(L"binding success, IPv6 Address: {}, interface description : {}", p_wstr_ipv6, adapter->Description);
+				auto	wstr_len					  = (DWORD)INET6_ADDRSTRLEN;
+				wchar_t p_wstr_ipv6[INET6_ADDRSTRLEN] = { 0 };
+				// Convert the IPv6 address to a string.
+				if (::WSAAddressToStringW((LPSOCKADDR)&sock_addr, sizeof(sockaddr_in6), NULL, p_wstr_ipv6, &wstr_len) == 0)
+				{
+					logger::info(L"binding success, IPv6 Address: {}, interface description : {}", p_wstr_ipv6, adapter->Description);
+				}
 			}
+			else
+			{
+				auto	wstr_len					 = (DWORD)INET_ADDRSTRLEN;
+				wchar_t p_wstr_ipv4[INET_ADDRSTRLEN] = { 0 };
+				if (::WSAAddressToStringW((LPSOCKADDR)&sock_addr, sizeof(sockaddr_in), NULL, p_wstr_ipv4, &wstr_len) == 0)
+				{
+					logger::info(L"binding success, IPv4 Address: {}, interface description : {}", p_wstr_ipv4, adapter->Description);
+				}
+			}
+
 
 			socks.emplace_back(sock);
 
