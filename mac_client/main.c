@@ -7,17 +7,21 @@
 #include <sys/time.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <errno.h>
+#include "bind.h"
 
-#define SERVER_IP "fe80::7087:d734:b188:8dde%en0"  // 서버 IPv6 주소
+#define SERVER_IP "2001:2d8:2214:9e87:c3a8:5f41:3f77:338d"  // 서버 IPv6 주소
 #define SERVER_PORT 5050                           // 서버 포트 번호
+#define CLIENT_PORT 5054                           // 클라이언트 포트 번호
 #define CLIENT_NAME "Mac_Client"
 
 // 패킷 구조체 정의
 typedef struct {
     uint16_t type;
     uint16_t name_length;
-    char name[32];
+    char name[10];
 } Packet_0;
+int size_of_packet0 = sizeof(Packet_0);
 
 typedef struct {
     uint16_t type;
@@ -63,7 +67,7 @@ int is_connected = 0; // 연결 여부 확인
 // 함수 원형 선언
 void* delay_loop(void* arg);
 void* receive_packets(void* arg);
-void send_packet(void* packet, size_t size);
+ssize_t send_packet(void* packet, size_t size);
 
 // 현재 시간을 ns 단위로 반환하는 함수
 uint64_t get_current_time_ns() {
@@ -73,16 +77,24 @@ uint64_t get_current_time_ns() {
 }
 
 // 패킷 전송 함수
-void send_packet(void* packet, size_t size) {
-    sendto(client_socket, packet, size, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+ssize_t send_packet(void* packet, size_t size) {
+    ssize_t res = sendto(client_socket, packet, size, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    if(res == -1){
+        printf("sendto failed with %s\n",strerror(errno));
+    }
+    else{
+        printf("sendto successed with send byte %zd \n",res);
+    }
+    return res;
 }
 
 // 딜레이 측정 패킷 전송 루프 (연결 상태와 관계없이 계속 실행)
 void* delay_loop(void* arg) {
     while (1) {
         Packet_3 delay_packet = {3, client_id, seq_num++, get_current_time_ns(), 0, 0, 0};
-        send_packet(&delay_packet, sizeof(delay_packet));
-        printf("Sent delay packet: Seq %u\n", delay_packet.seq_num);
+        if(send_packet(&delay_packet, sizeof(delay_packet))>0) {
+            printf("Sent delay packet: Seq %u\n", delay_packet.seq_num);
+        }
         sleep(1);
     }
     return NULL;
@@ -94,7 +106,9 @@ void* receive_packets(void* arg) {
     socklen_t addr_len = sizeof(server_addr);
 
     while (1) {
-        ssize_t recv_len = recvfrom(client_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&server_addr, &addr_len);
+        //ssize_t recv_len = recvfrom(client_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&server_addr, &addr_len);
+        ssize_t recv_len = recvfrom(client_socket, buffer, sizeof(buffer), 0, NULL, &addr_len);
+        printf("recv packet , len : %zd, type :%d\n",recv_len, *(uint16_t*)buffer);
         if (recv_len > 0) {
             uint16_t packet_type = *(uint16_t*)buffer;
             switch (packet_type) {
@@ -108,12 +122,19 @@ void* receive_packets(void* arg) {
                         // 클라이언트 재응답 (Packet_2)
                         Packet_2 response = {2, client_id, 0};
                         send_packet(&response, sizeof(response));
-                    } else {
+                    }
+                    else {
                         printf("Connection failed. Error: %d\n", p->res);
                     }
+                    // 딜레이 측정 스레드 시작
+                    pthread_t delay_thread;
+                    pthread_create(&delay_thread, NULL, delay_loop, NULL);
+                    pthread_detach(delay_thread);
+
                     break;
                 }
                 case 3: {  // 서버의 딜레이 응답 (Packet_3)
+
                     Packet_3* p = (Packet_3*)buffer;
                     p->time_client_recv = get_current_time_ns();
                     uint64_t delay = (p->time_client_recv - p->time_client_send);
@@ -136,35 +157,40 @@ void* receive_packets(void* arg) {
 }
 
 int main() {
-    // 소켓 생성 (IPv6, UDP)
-    client_socket = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (client_socket < 0) {
+    printf("hello world");
+    printf("%d",size_of_packet0);
+
+    socket_array sock_arr = get_binded_socks(CLIENT_PORT,10);
+    if(sock_arr.count == 0 ){
         perror("Socket creation failed");
         return 1;
     }
+
+    client_socket = sock_arr.socks[0];
 
     // 서버 주소 설정
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin6_family = AF_INET6;
     server_addr.sin6_port = htons(SERVER_PORT);
-    inet_pton(AF_INET6, SERVER_IP, &server_addr.sin6_addr);
+    if(inet_pton(AF_INET6, SERVER_IP, &server_addr.sin6_addr) != 1){
+        printf("inet_pton failed");
+    }
 
     // 연결 요청 (Packet_0)
     Packet_0 init_packet = {0, strlen(CLIENT_NAME)};
     strncpy(init_packet.name, CLIENT_NAME, sizeof(init_packet.name));
 
-    send_packet(&init_packet, sizeof(init_packet));
-    printf("Sent connection request...\n");
+    ssize_t res = send_packet(&init_packet, sizeof(init_packet));
+    if(res == -1){
+printf("Sento failed with error code %s...\n", strerror(errno));
+    }
+
 
     // 수신 스레드 시작
     pthread_t recv_thread;
     pthread_create(&recv_thread, NULL, receive_packets, NULL);
     pthread_detach(recv_thread);
 
-    // 딜레이 측정 스레드 시작 (연결 여부와 관계없이 실행)
-    pthread_t delay_thread;
-    pthread_create(&delay_thread, NULL, delay_loop, NULL);
-    pthread_detach(delay_thread);
 
     // 사용자 입력 대기
     while (1) {
@@ -181,3 +207,4 @@ int main() {
     close(client_socket);
     return 0;
 }
+
