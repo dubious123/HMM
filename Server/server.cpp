@@ -11,7 +11,7 @@ struct c_session
 	uint32		c_id;
 	bool		connected = false;
 
-	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) {};
+	c_session(char* p_name, uint32 name_len, uint32 id) : c_name(p_name, name_len), c_id(id) { };
 };
 
 struct iocp_key_wsa_recv
@@ -286,8 +286,8 @@ bool server::init()
 		goto failed;
 	}
 
-	send_socket	  = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	listen_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	send_socket	  = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	if (send_socket == INVALID_SOCKET or listen_socket == INVALID_SOCKET)
 	{
@@ -311,6 +311,15 @@ bool server::init()
 		}
 
 		listen_socket = socks[0];
+	}
+
+	{
+		sockaddr_in server_addr		= {};
+		server_addr.sin_family		= AF_INET;
+		server_addr.sin_addr.s_addr = INADDR_ANY;
+		server_addr.sin_port		= htons(PORT_SERVER);
+
+		::bind(send_socket, (sockaddr*)&server_addr, sizeof(server_addr));
 	}
 
 	if (::CreateIoCompletionPort((HANDLE)listen_socket, h_iocp, /*(ULONG_PTR)&iocp_key_recv*/ 0, 0) == nullptr)
