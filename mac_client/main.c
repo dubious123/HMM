@@ -3,25 +3,28 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <inttypes.h>
 #include <pthread.h>
 #include <errno.h>
+#include <inttypes.h>
 #include "bind.h"
 
-#define SERVER_IP "2001:2d8:2214:9e87:c3a8:5f41:3f77:338d"  // 서버 IPv6 주소
-#define SERVER_PORT 5050                           // 서버 포트 번호
-#define CLIENT_PORT 5054                           // 클라이언트 포트 번호
+// 서버 IPv4 주소 & 포트
+#define SERVER_IP   "121.88.244.43"   // 혹은 "192.168.0.10" 등
+#define SERVER_PORT 12345
+
+// 클라이언트가 bind할 포트
+#define CLIENT_PORT 12346
 #define CLIENT_NAME "Mac_Client"
 
-// 패킷 구조체 정의
+// ----------------------------
+// 패킷 구조체들
+// ----------------------------
 typedef struct {
     uint16_t type;
     uint16_t name_length;
     char name[10];
 } Packet_0;
-int size_of_packet0 = sizeof(Packet_0);
 
 typedef struct {
     uint16_t type;
@@ -57,154 +60,231 @@ typedef struct {
     uint32_t client_id;
 } Packet_4, Packet_5;
 
-// 전역 변수
-int client_socket;
-struct sockaddr_in6 server_addr;
-uint32_t client_id = 0;
-uint32_t seq_num = 0;
-int is_connected = 0; // 연결 여부 확인
+// ----------------------------
+// 세션 구조체
+// ----------------------------
+typedef struct {
+    int sock;
+    uint32_t client_id;
+    uint32_t seq_num;
+    int is_connected;
+    pthread_t recv_thread;
+    pthread_t delay_thread;
+} Session;
 
-// 함수 원형 선언
-void* delay_loop(void* arg);
-void* receive_packets(void* arg);
-ssize_t send_packet(void* packet, size_t size);
+// 서버 주소 (IPv4)
+struct sockaddr_in server_addr;
 
-// 현재 시간을 ns 단위로 반환하는 함수
+// ----------------------------
+// 도우미 함수들
+// ----------------------------
+
+// 현재 시간을 ns로 반환
 uint64_t get_current_time_ns() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t)tv.tv_sec * 1000000000LL + (uint64_t)tv.tv_usec * 1000LL;
 }
 
-// 패킷 전송 함수
-ssize_t send_packet(void* packet, size_t size) {
-    ssize_t res = sendto(client_socket, packet, size, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    if(res == -1){
-        printf("sendto failed with %s\n",strerror(errno));
-    }
-    else{
-        printf("sendto successed with send byte %zd \n",res);
+// 서버로 패킷 전송
+ssize_t send_packet(int sock, void* packet, size_t size) {
+    ssize_t res = sendto(sock, packet, size, 0,
+                         (struct sockaddr*)&server_addr, sizeof(server_addr));
+    if (res == -1) {
+        printf("sendto failed: %s\n", strerror(errno));
+    } else {
+        printf("sendto succeeded, sent %zd bytes\n", res);
+        printf("packet type : %d\n", *(ushort*)packet);
     }
     return res;
 }
 
-// 딜레이 측정 패킷 전송 루프 (연결 상태와 관계없이 계속 실행)
-void* delay_loop(void* arg) {
+// ----------------------------
+// 딜레이 측정용 스레드
+// ----------------------------
+void* session_delay(void* arg) {
+    Session* s = (Session*) arg;
     while (1) {
-        Packet_3 delay_packet = {3, client_id, seq_num++, get_current_time_ns(), 0, 0, 0};
-        if(send_packet(&delay_packet, sizeof(delay_packet))>0) {
-            printf("Sent delay packet: Seq %u\n", delay_packet.seq_num);
+        Packet_3 pkt;
+        memset(&pkt, 0, sizeof(pkt));
+        pkt.type             = 3;
+        pkt.client_id        = s->client_id;
+        pkt.seq_num          = s->seq_num++;
+        pkt.time_client_send = get_current_time_ns();
+
+        if (send_packet(s->sock, &pkt, sizeof(pkt)) > 0) {
+            printf("[client_id=%u] Sent delay packet, Seq=%u\n",
+                   s->client_id, pkt.seq_num);
         }
         sleep(1);
     }
     return NULL;
 }
 
-// 서버 응답 수신 스레드
-void* receive_packets(void* arg) {
+// ----------------------------
+// 수신 스레드
+// ----------------------------
+void* session_receive(void* arg) {
+    Session* s = (Session*) arg;
     char buffer[1024];
     socklen_t addr_len = sizeof(server_addr);
 
     while (1) {
-        //ssize_t recv_len = recvfrom(client_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&server_addr, &addr_len);
-        ssize_t recv_len = recvfrom(client_socket, buffer, sizeof(buffer), 0, NULL, &addr_len);
-        printf("recv packet , len : %zd, type :%d\n",recv_len, *(uint16_t*)buffer);
+        ssize_t recv_len = recvfrom(s->sock, buffer, sizeof(buffer),
+                                    0, NULL, &addr_len);
         if (recv_len > 0) {
             uint16_t packet_type = *(uint16_t*)buffer;
+            printf("[socket=%d] Received packet, len=%zd, type=%u\n",
+                   s->sock, recv_len, packet_type);
+
             switch (packet_type) {
-                case 1: {  // 서버 응답 (Packet_1)
+                case 1: { // Packet_1 (서버 응답)
                     Packet_1* p = (Packet_1*)buffer;
                     if (p->res == 0) {
-                        client_id = p->client_id;
-                        is_connected = 1;
-                        printf("Connected! Client ID: %u\n", client_id);
+                        s->client_id   = p->client_id;
+                        s->is_connected = 1;
+                        printf("Connected! Client ID=%u\n", s->client_id);
 
-                        // 클라이언트 재응답 (Packet_2)
-                        Packet_2 response = {2, client_id, 0};
-                        send_packet(&response, sizeof(response));
-                    }
-                    else {
-                        printf("Connection failed. Error: %d\n", p->res);
-                    }
-                    // 딜레이 측정 스레드 시작
-                    pthread_t delay_thread;
-                    pthread_create(&delay_thread, NULL, delay_loop, NULL);
-                    pthread_detach(delay_thread);
+                        // 연결 성공 → Packet_2 전송
+                        Packet_2 resp;
+                        memset(&resp, 0, sizeof(resp));
+                        resp.type      = 2;
+                        resp.client_id = s->client_id;
+                        resp.res       = 0;
+                        send_packet(s->sock, &resp, sizeof(resp));
 
+                        // 연결 후 딜레이 스레드 시작
+                        if (s->delay_thread == 0) {
+                            pthread_t tid;
+                            if (pthread_create(&tid, NULL, session_delay, s) == 0) {
+                                s->delay_thread = tid;
+                                pthread_detach(tid);
+                            } else {
+                                perror("Failed to create delay thread");
+                            }
+                        }
+                    } else {
+                        printf("Connection failed, error code=%d\n", p->res);
+                    }
                     break;
                 }
-                case 3: {  // 서버의 딜레이 응답 (Packet_3)
-
+                case 3: { // Packet_3 (딜레이 응답)
                     Packet_3* p = (Packet_3*)buffer;
                     p->time_client_recv = get_current_time_ns();
-                    uint64_t delay = (p->time_client_recv - p->time_client_send);
-                    printf("Seq %u, Delay: %" PRIu64 " ns\n", p->seq_num, delay);
+                    uint64_t delay_ns = (p->time_client_recv - p->time_client_send);
+                    printf("Seq=%u, Delay=%" PRIu64 " ns\n", p->seq_num, delay_ns);
 
-                    // 딜레이 결과 전송 (Packet_6)
-                    Packet_6 delay_response = {6, client_id, p->seq_num, delay};
-                    send_packet(&delay_response, sizeof(delay_response));
+                    // 딜레이 결과(Packet_6) 전송
+                    Packet_6 dres;
+                    memset(&dres, 0, sizeof(dres));
+                    dres.type      = 6;
+                    dres.client_id = s->client_id;
+                    dres.seq_num   = p->seq_num;
+                    dres.delay     = delay_ns;
+                    send_packet(s->sock, &dres, sizeof(dres));
                     break;
                 }
-                case 5: {  // 서버 종료 요청 (Packet_5)
-                    printf("Server requested disconnect. Closing client...\n");
-                    close(client_socket);
-                    exit(0);
+                case 5: { // Packet_5 (서버 종료 알림)
+                    printf("Server requested disconnect. Closing session...\n");
+                    close(s->sock);
+                    pthread_exit(NULL);
+                    break;
                 }
+                default:
+                    printf("Unknown packet type=%u\n", packet_type);
             }
+        } else if (recv_len == -1) {
+            printf("recvfrom failed: %s\n", strerror(errno));
         }
     }
     return NULL;
 }
 
+// ----------------------------
+// main
+// ----------------------------
 int main() {
-    printf("hello world");
-    printf("%d",size_of_packet0);
+    printf("=== IPv4 Client Starting... ===\n");
 
-    socket_array sock_arr = get_binded_socks(CLIENT_PORT,10);
-    if(sock_arr.count == 0 ){
-        perror("Socket creation failed");
+    // bind.h/c를 통해 IPv4 소켓들 가져오기
+    socket_array sock_arr = get_binded_socks(CLIENT_PORT, 10);
+
+    if (sock_arr.count == 0) {
+        printf("No sockets created. Exiting.\n");
         return 1;
     }
 
-    client_socket = sock_arr.socks[0];
+    printf("Total sessions: %zu\n", sock_arr.count);
 
     // 서버 주소 설정
     memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin6_family = AF_INET6;
-    server_addr.sin6_port = htons(SERVER_PORT);
-    if(inet_pton(AF_INET6, SERVER_IP, &server_addr.sin6_addr) != 1){
-        printf("inet_pton failed");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port   = htons(SERVER_PORT);
+    if (inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr) != 1) {
+        printf("inet_pton failed\n");
+        return 1;
     }
 
-    // 연결 요청 (Packet_0)
-    Packet_0 init_packet = {0, strlen(CLIENT_NAME)};
-    strncpy(init_packet.name, CLIENT_NAME, sizeof(init_packet.name));
-
-    ssize_t res = send_packet(&init_packet, sizeof(init_packet));
-    if(res == -1){
-printf("Sento failed with error code %s...\n", strerror(errno));
+    // 세션 배열 할당
+    Session* sessions = (Session*)malloc(sizeof(Session) * sock_arr.count);
+    if (!sessions) {
+        perror("malloc for sessions failed");
+        return 1;
     }
+    memset(sessions, 0, sizeof(Session) * sock_arr.count);
 
+    // 각 소켓에 대해 init 패킷(Packet_0) 전송
+    for (size_t i = 0; i < sock_arr.count; i++) {
+        sessions[i].sock = sock_arr.socks[i];
+        sessions[i].seq_num = 0;
+        sessions[i].client_id = 0;
+        sessions[i].is_connected = 0;
+        sessions[i].delay_thread = 0;
 
-    // 수신 스레드 시작
-    pthread_t recv_thread;
-    pthread_create(&recv_thread, NULL, receive_packets, NULL);
-    pthread_detach(recv_thread);
+        // Packet_0
+        Packet_0 initp;
+        memset(&initp, 0, sizeof(initp));
+        initp.type         = 0;
+        initp.name_length  = strlen(CLIENT_NAME);
+        strncpy(initp.name, CLIENT_NAME, sizeof(initp.name));
 
+        // 전송
+        if (send_packet(sessions[i].sock, &initp, sizeof(initp)) == -1) {
+            printf("[session %zu] Failed to send init packet\n", i);
+        } else {
+            printf("[session %zu] Sent init packet\n", i);
+        }
 
-    // 사용자 입력 대기
-    while (1) {
-        char command[10];
-        scanf("%s", command);
-        if (strcmp(command, "exit") == 0) {
-            Packet_4 disconnect_packet = {4, client_id};
-            send_packet(&disconnect_packet, sizeof(disconnect_packet));
-            printf("Disconnected from server.\n");
-            break;
+        // 수신 스레드 생성
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, session_receive, &sessions[i]) != 0) {
+            perror("Failed to create recv thread");
+        } else {
+            sessions[i].recv_thread = tid;
+            pthread_detach(tid);
         }
     }
 
-    close(client_socket);
+    // "exit" 입력 시 disconnect
+    while (1) {
+        char command[16];
+        if (scanf("%15s", command) == 1) {
+            if (strcmp(command, "exit") == 0) {
+                for (size_t i = 0; i < sock_arr.count; i++) {
+                    Packet_4 disc;
+                    memset(&disc, 0, sizeof(disc));
+                    disc.type      = 4; // disconnect
+                    disc.client_id = sessions[i].client_id;
+                    send_packet(sessions[i].sock, &disc, sizeof(disc));
+                    printf("[session %zu] Disconnected.\n", i);
+                    close(sessions[i].sock);
+                }
+                break;
+            }
+        }
+    }
+
+    free(sessions);
+    free(sock_arr.socks);
     return 0;
 }
-
