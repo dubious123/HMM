@@ -11,6 +11,8 @@
 #define PORT_SERVER 12345
 #define PORT_CLIENT 12346
 
+#define STUN_SERVER_IPV4 "74.125.142.127"
+
 using uint64 = uint64_t;
 using uint32 = uint32_t;
 using uint16 = uint16_t;
@@ -79,6 +81,7 @@ namespace net_core
 {
 	std::vector<SOCKET> get_binded_socks(uint16 port, std::initializer_list<uint64> adapter_filter, uint32 max_count = -1);
 	std::string			sockaddr_to_str(const sockaddr* sa, socklen_t salen);
+	static sockaddr_in& stun_server_sockaddr();
 }	 // namespace net_core
 
 namespace logger

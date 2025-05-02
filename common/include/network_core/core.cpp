@@ -219,3 +219,16 @@ std::string net_core::sockaddr_to_str(const sockaddr* sa, socklen_t salen)
 	}
 	return std::string(host);
 }
+
+static sockaddr_in& net_core::stun_server_sockaddr()
+{
+	static auto _stun_server_sockaddr = []() {
+		auto temp		= sockaddr_in {};
+		temp.sin_family = AF_INET;
+		inet_pton(AF_INET, "74.125.142.127", &temp.sin_addr);	 // stun.l.google.com
+		temp.sin_port = htons(19302);
+		return temp;
+	}();
+
+	return _stun_server_sockaddr;
+}

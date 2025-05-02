@@ -26,7 +26,7 @@ struct session
 namespace
 {
 	// constexpr auto server_addr = "fe80::dffa:bfeb:7029:918d";
-	constexpr auto server_addr = "172.30.1.3";
+	constexpr auto server_addr = "121.88.244.43";
 	// constexpr auto								   server_addr = "2001:2d8:2120:8c19:5b69:cd74:bc6d:466e";
 
 	auto sessions		  = std::vector<session> {};
@@ -58,7 +58,7 @@ namespace
 			auto&& [p_packet, len] = packet_func();
 
 			// p.time_client_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			if (sendto(sock, (char*)p_packet, len, 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			if (sendto(sock, (char*)p_packet, len, 0, (sockaddr*)&server_addr_info, sizeof(sockaddr_in)) == SOCKET_ERROR)
 			{
 				err_msg("sendto() failed");
 			}
@@ -151,10 +151,9 @@ bool client::init()
 		goto failed;
 	}
 
-	sessions =
-		net_core::get_binded_socks(PORT_CLIENT, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 })
-		| std::views::transform([](auto sock) { return session(sock); })
-		| std::ranges::to<std::vector>();
+	sessions = net_core::get_binded_socks(PORT_CLIENT, { IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211 })
+			 | std::views::transform([](auto sock) { return session(sock); })
+			 | std::ranges::to<std::vector>();
 
 	if (sessions.size() == 0)
 	{

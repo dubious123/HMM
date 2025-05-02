@@ -23,12 +23,13 @@ struct recv_io_data
 	WSAOVERLAPPED		   wsa_overlapped;	  // do not move
 	WSABUF				   wsa_buf;
 	std::array<char, 1024> recv_buf;
-	sockaddr_in6		   client_addr;
+	sockaddr_in			   client_addr;
 	int32				   client_addr_size;
 	uint32				   recv_len;
 	uint32				   io_flag;
+	bool				   is_from_client;
 
-	recv_io_data() : io_flag(0), client_addr_size(sizeof(client_addr))
+	recv_io_data() : io_flag(0), client_addr_size(sizeof(client_addr)), is_from_client(true)
 	{
 		assert((uint64)this == (uint64)&wsa_overlapped);
 		ZeroMemory(&wsa_overlapped, sizeof(WSAOVERLAPPED));
@@ -43,7 +44,7 @@ struct send_io_data
 	WSAOVERLAPPED		   wsa_overlapped;	  // do not move
 	WSABUF				   wsa_buf;
 	std::array<char, 1024> recv_buf;
-	sockaddr_in6		   client_addr;
+	sockaddr_in			   client_addr;
 	int32				   client_addr_size;
 	uint32				   recv_len;
 	uint32				   io_flag;
@@ -60,8 +61,7 @@ struct send_io_data
 
 namespace
 {
-	auto send_socket	  = SOCKET {};
-	auto listen_socket	  = SOCKET {};
+	auto server_socket	  = SOCKET {};
 	auto server_addr_info = sockaddr_in6 {};
 
 	auto send_thread = std::thread();
@@ -72,6 +72,10 @@ namespace
 
 	auto recv_thread_arr = std::array<std::thread, RECV_THREAD_COUNT> {};
 	auto recv_io_datas	 = std::array<recv_io_data, RECV_THREAD_COUNT> {};
+
+	auto stun_recv_thread	= std::thread {};
+	auto stun_send_thread	= std::thread {};
+	auto stun_recv_io_datas = []() { auto temp = recv_io_data {}; temp.is_from_client = false; return temp; }();
 
 	// std::vector<c_session> sessions;
 	concurrency::concurrent_vector<c_session> sessions;
@@ -138,12 +142,12 @@ struct memory_buffer
 
 namespace
 {
-	auto send_queue = concurrency::concurrent_queue<std::function<std::tuple<void*, size_t, sockaddr_in6>()>>();
+	auto send_queue = concurrency::concurrent_queue<std::function<std::tuple<void*, size_t, sockaddr_in>()>>();
 
 	void _send_loop()
 	{
-		auto													 seq_num = 0;
-		std::function<std::tuple<void*, size_t, sockaddr_in6>()> packet_func;
+		auto													seq_num = 0;
+		std::function<std::tuple<void*, size_t, sockaddr_in>()> packet_func;
 		while (sending)
 		{
 			if (send_queue.try_pop(packet_func) is_false)
@@ -153,10 +157,10 @@ namespace
 
 			auto&& [p_mem, len, addr] = packet_func();
 
-			addr.sin6_port = ::htons(PORT_CLIENT);
+			addr.sin_port = ::htons(PORT_CLIENT);
 
 			// send_packet.time_server_send = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			if (::sendto(send_socket, (char*)p_mem, len, 0, (sockaddr*)&addr, sizeof(sockaddr_in6)) == SOCKET_ERROR)
+			if (::sendto(server_socket, (char*)p_mem, len, 0, (sockaddr*)&addr, sizeof(sockaddr_in)) == SOCKET_ERROR)
 			{
 				err_msg("sendto() failed");
 			}
@@ -247,7 +251,7 @@ namespace
 
 			server::handle_packet(p_mem, recv_len, &p_recv_io_data->client_addr);
 
-			res = ::WSARecvFrom(listen_socket,
+			res = ::WSARecvFrom(server_socket,
 								&p_recv_io_data->wsa_buf,
 								1,
 								/*(LPDWORD)&sessions[idx].recv_len*/ nullptr,
@@ -286,15 +290,6 @@ bool server::init()
 		goto failed;
 	}
 
-	listen_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	send_socket	  = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-	if (send_socket == INVALID_SOCKET or listen_socket == INVALID_SOCKET)
-	{
-		err_msg("socket creation failed");
-		goto failed;
-	}
-
 	h_iocp = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, RECV_THREAD_COUNT);
 	if (h_iocp is_nullptr)
 	{
@@ -310,19 +305,10 @@ bool server::init()
 			goto failed;
 		}
 
-		listen_socket = socks[0];
+		server_socket = socks[0];
 	}
 
-	{
-		sockaddr_in server_addr		= {};
-		server_addr.sin_family		= AF_INET;
-		server_addr.sin_addr.s_addr = INADDR_ANY;
-		server_addr.sin_port		= htons(PORT_SERVER);
-
-		::bind(send_socket, (sockaddr*)&server_addr, sizeof(server_addr));
-	}
-
-	if (::CreateIoCompletionPort((HANDLE)listen_socket, h_iocp, /*(ULONG_PTR)&iocp_key_recv*/ 0, 0) == nullptr)
+	if (::CreateIoCompletionPort((HANDLE)server_socket, h_iocp, /*(ULONG_PTR)&iocp_key_recv*/ 0, 0) == nullptr)
 	{
 		err_msg("CreateIoCompletionPort() failed");
 		goto failed;
@@ -332,7 +318,7 @@ bool server::init()
 	{
 		while (true)
 		{
-			auto res = ::WSARecvFrom(listen_socket,
+			auto res = ::WSARecvFrom(server_socket,
 									 &recv_io_datas[idx].wsa_buf,
 									 1,
 									 /*(LPDWORD)&sessions[idx].recv_len*/ nullptr,
@@ -365,6 +351,15 @@ bool server::init()
 		recv_thread_arr[idx] = std::thread(_iocp_recv_loop);
 	}
 
+	// stun_send_thread = std::thread([]() {
+
+	//	auto* p_stun_packet = malloc(sizeof());
+
+	//	send_queue.push();
+
+	//	Sleep(1000);
+	//});
+
 	return true;
 failed:
 	::WSACleanup();
@@ -389,7 +384,7 @@ void server::deinit()
 	::WSACleanup();
 }
 
-void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in6* p_addr)
+void server::handle_packet(void* p_mem, int32 recv_len, sockaddr_in* p_addr)
 {
 	if (recv_len < sizeof(uint16))
 	{
