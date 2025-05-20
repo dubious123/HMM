@@ -1,10 +1,13 @@
 #include <iostream>
+#include <fstream>
 #include <array>
 #include <ranges>
 #include <algorithm>
 #include <random>
 #include <format>
 #include <sstream>
+#include <regex>
+#include <cassert>
 #include "common.h"
 
 using t_state		= uint8;
@@ -179,6 +182,11 @@ struct model
 		}
 	}
 
+	void update_observations(auto&& view)
+	{
+		std::ranges::copy(view, observations.begin());
+	}
+
 	void gen_random_observations()
 	{
 		std::random_device					 rd;
@@ -321,6 +329,45 @@ struct model
 
 	void baum_welch()
 	{
+		auto it_count = 1;
+		for (auto i : std::views::iota(0, it_count))
+		{
+			forward();
+			backward();
+			init_gamma();
+			init_xi();
+
+			for (auto curr_state : std::views::iota(0uz, state_count))
+			{
+				pi[curr_state] = gamma[0][curr_state];
+				auto gamma_sum = *std::ranges::fold_left_first(
+					std::views::iota(0uz, T)
+					| std::views::transform([this, curr_state](auto t) {
+						return gamma[t][curr_state];
+					}), std::plus {});
+
+				for (auto next_state : std::views::iota(0uz, state_count))
+				{
+					auto xi_sum = *std::ranges::fold_left_first(
+							std::views::iota(0uz, T)
+							| std::views::transform([this, curr_state, next_state](auto t) {
+								return xi[t][curr_state][next_state];
+							}), std::plus {});
+
+					A[curr_state][next_state] = xi_sum / gamma_sum;
+				}
+
+				for (auto o : std::views::iota(0uz, observation_count))
+				{
+					B[curr_state][o]  = *std::ranges::fold_left_first(
+					std::views::iota(0uz, T)
+					| std::views::filter([this, o](auto t){return observations[t] == o; })
+					| std::views::transform([this, curr_state](auto t) {
+						return gamma[t][curr_state];
+					}), std::plus {}) / gamma_sum;
+				}
+			}
+		}
 	}
 
 	void print()
@@ -352,14 +399,43 @@ struct model
 
 int main()
 {
-	model<5, 10, 10> hmm;
+	model<5, 10, T> hmm;
 	hmm.init_A_B_pi();
 	hmm.gen_random_observations();
 
-	hmm.forward();
-	hmm.backward();
-	hmm.init_gamma();
-	hmm.init_xi();
+	std::ifstream file("../delay.txt");
+	assert(file.is_open() and "invalid file");
+	std::regex num_regex(R"((\d+)\s*$)");
+	auto epoch_num = 0;
+	auto end_of_file = false;
+	while (not end_of_file)
+	{
+		std::cout << "epoch : " << epoch_num++ << std::endl;
+		hmm.update_observations(
+			std::views::iota(0, T)
+				| std::views::transform([&file, &num_regex, &end_of_file](auto i) {
+				std::string line;
+				std::smatch match;
+				if (std::getline(file, line))
+				{
+					if (std::regex_search(line, match, num_regex))
+					{
+						return std::stoi(match[1]) % 10;
+					}
+				}
+				end_of_file = true;
+				return 0;
+		}));
+		hmm.baum_welch();
+	}
+
+
+
+
+
+
+
+
 	hmm.viterbi();
 
 	hmm.print();
